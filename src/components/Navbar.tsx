@@ -2,6 +2,7 @@ import { ShoppingCart, User, Search, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Link } from "react-router-dom";
 
 export const Navbar = () => {
   return (
@@ -10,25 +11,25 @@ export const Navbar = () => {
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
           <div className="flex items-center gap-8">
-            <a href="/" className="flex items-center gap-2">
+            <Link to="/" className="flex items-center gap-2">
               <div className="h-8 w-8 rounded-lg bg-gradient-primary" />
               <span className="text-xl font-bold">SmartCart</span>
-            </a>
+            </Link>
             
             {/* Desktop Navigation */}
             <div className="hidden md:flex items-center gap-6">
-              <a href="#" className="text-sm font-medium hover:text-primary transition-colors">
+              <Link to="/products" className="text-sm font-medium hover:text-primary transition-colors">
                 Products
-              </a>
-              <a href="#" className="text-sm font-medium hover:text-primary transition-colors">
+              </Link>
+              <Link to="/categories" className="text-sm font-medium hover:text-primary transition-colors">
                 Categories
-              </a>
-              <a href="#" className="text-sm font-medium hover:text-primary transition-colors">
+              </Link>
+              <Link to="/deals" className="text-sm font-medium hover:text-primary transition-colors">
                 Deals
-              </a>
-              <a href="#" className="text-sm font-medium hover:text-primary transition-colors">
+              </Link>
+              <Link to="/vendors" className="text-sm font-medium hover:text-primary transition-colors">
                 Vendors
-              </a>
+              </Link>
             </div>
           </div>
 
