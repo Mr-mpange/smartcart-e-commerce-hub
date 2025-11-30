@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { ShoppingCart, Star } from "lucide-react";
 
 interface ProductCardProps {
+  id?: string;
   name: string;
   price: number;
   originalPrice?: number;
@@ -12,9 +13,11 @@ interface ProductCardProps {
   reviews: number;
   vendor: string;
   inStock: boolean;
+  onAddToCart?: (productId: string) => void;
 }
 
 export const ProductCard = ({
+  id,
   name,
   price,
   originalPrice,
@@ -22,7 +25,8 @@ export const ProductCard = ({
   rating,
   reviews,
   vendor,
-  inStock
+  inStock,
+  onAddToCart
 }: ProductCardProps) => {
   const discount = originalPrice ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0;
 
@@ -60,11 +64,11 @@ export const ProductCard = ({
         
         <div className="flex items-baseline gap-2">
           <span className="text-2xl font-bold text-primary">
-            ${price.toFixed(2)}
+            TSh {price.toLocaleString()}
           </span>
           {originalPrice && (
             <span className="text-sm text-muted-foreground line-through">
-              ${originalPrice.toFixed(2)}
+              TSh {originalPrice.toLocaleString()}
             </span>
           )}
         </div>
@@ -74,6 +78,7 @@ export const ProductCard = ({
         <Button 
           className="w-full bg-gradient-primary hover:opacity-90 transition-opacity" 
           disabled={!inStock}
+          onClick={() => id && onAddToCart && onAddToCart(id)}
         >
           <ShoppingCart className="mr-2 h-4 w-4" />
           Add to Cart
