@@ -78,7 +78,14 @@ export const ProductCard = ({
         <Button 
           className="w-full bg-gradient-primary hover:opacity-90 transition-opacity" 
           disabled={!inStock}
-          onClick={() => id && onAddToCart && onAddToCart(id)}
+          onClick={() => {
+            if (id && onAddToCart) {
+              onAddToCart(id);
+            } else if (onAddToCart) {
+              // For demo products without database IDs
+              onAddToCart('demo');
+            }
+          }}
         >
           <ShoppingCart className="mr-2 h-4 w-4" />
           Add to Cart

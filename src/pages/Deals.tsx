@@ -1,14 +1,17 @@
+import { useNavigate } from "react-router-dom";
 import { Navbar } from "@/components/Navbar";
 import { ProductCard } from "@/components/ProductCard";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Flame, Clock, Zap } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 const deals = [
   {
     name: "Gaming Laptop RTX 4060",
-    price: 899.99,
-    originalPrice: 1299.99,
+    price: 899999,
+    originalPrice: 1299999,
     image: "https://images.unsplash.com/photo-1603302576837-37561b2e2302?w=500",
     rating: 4.8,
     reviews: 89,
@@ -17,8 +20,8 @@ const deals = [
   },
   {
     name: "Professional Camera Bundle",
-    price: 449.99,
-    originalPrice: 699.99,
+    price: 449999,
+    originalPrice: 699999,
     image: "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=500",
     rating: 4.7,
     reviews: 124,
@@ -27,8 +30,8 @@ const deals = [
   },
   {
     name: "Bluetooth Speaker Premium",
-    price: 59.99,
-    originalPrice: 99.99,
+    price: 59999,
+    originalPrice: 99999,
     image: "https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?w=500",
     rating: 4.5,
     reviews: 234,
@@ -37,9 +40,9 @@ const deals = [
   },
   {
     name: "Smart Home Hub",
-    price: 79.99,
-    originalPrice: 129.99,
-    image: "https://images.unsplash.com/photo-1558089687-e16a5f4a5a8c?w=500",
+    price: 79999,
+    originalPrice: 129999,
+    image: "https://images.unsplash.com/photo-1558089687-f282ffcbc126?w=500",
     rating: 4.6,
     reviews: 167,
     vendor: "SmartLife",
@@ -48,6 +51,20 @@ const deals = [
 ];
 
 const Deals = () => {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const handleAddToCart = (productIndex: number) => {
+    if (!user) {
+      toast.error('Please sign in to add items to cart');
+      navigate('/auth');
+      return;
+    }
+
+    const product = deals[productIndex];
+    toast.success(`${product.name} added to cart!`);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -129,7 +146,11 @@ const Deals = () => {
           
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {deals.map((product, index) => (
-              <ProductCard key={index} {...product} />
+              <ProductCard 
+                key={index} 
+                {...product} 
+                onAddToCart={() => handleAddToCart(index)}
+              />
             ))}
           </div>
         </div>
@@ -139,7 +160,11 @@ const Deals = () => {
           <h2 className="text-2xl font-bold mb-6">More Amazing Deals</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {deals.map((product, index) => (
-              <ProductCard key={`more-${index}`} {...product} />
+              <ProductCard 
+                key={`more-${index}`} 
+                {...product} 
+                onAddToCart={() => handleAddToCart(index)}
+              />
             ))}
           </div>
         </div>
