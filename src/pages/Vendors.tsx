@@ -1,11 +1,24 @@
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Navbar } from "@/components/Navbar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Star, MapPin, Package, Search, Verified } from "lucide-react";
+import { Star, MapPin, Package, Search, Verified, Store } from "lucide-react";
+import { VendorRegistration } from "@/components/VendorRegistration";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
-const vendors = [
+interface VendorProfile {
+  id: string;
+  user_id: string;
+  business_name: string;
+  business_description: string | null;
+  is_approved: boolean;
+}
+
+const staticVendors = [
   {
     name: "TechGear Pro",
     logo: "https://images.unsplash.com/photo-1560179707-f14e90ef3623?w=200",
@@ -69,15 +82,53 @@ const vendors = [
 ];
 
 const Vendors = () => {
+  const [vendors, setVendors] = useState<VendorProfile[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const { user, userRole } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    fetchVendors();
+  }, []);
+
+  const fetchVendors = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('vendor_profiles')
+        .select('*')
+        .eq('is_approved', true);
+
+      if (error) throw error;
+      setVendors(data || []);
+    } catch (error) {
+      console.error('Error fetching vendors:', error);
+    }
+  };
+
+  const filteredStaticVendors = staticVendors.filter(v => 
+    v.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
       
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2">Our Trusted Vendors</h1>
-          <p className="text-muted-foreground">Discover products from verified sellers across East Africa</p>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+          <div>
+            <h1 className="text-4xl font-bold mb-2">Our Trusted Vendors</h1>
+            <p className="text-muted-foreground">Discover products from verified sellers across East Africa</p>
+          </div>
+          
+          {userRole !== 'vendor' && <VendorRegistration />}
+          
+          {userRole === 'vendor' && (
+            <Button onClick={() => navigate('/vendor-dashboard')}>
+              <Store className="mr-2 h-4 w-4" />
+              Go to Dashboard
+            </Button>
+          )}
         </div>
 
         {/* Search */}
@@ -88,6 +139,8 @@ const Vendors = () => {
               type="search"
               placeholder="Search vendors..."
               className="pl-10"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
         </div>
@@ -96,13 +149,13 @@ const Vendors = () => {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <Card>
             <CardContent className="p-6 text-center">
-              <div className="text-3xl font-bold text-primary mb-1">1,247</div>
+              <div className="text-3xl font-bold text-primary mb-1">{staticVendors.length + vendors.length}</div>
               <div className="text-sm text-muted-foreground">Total Vendors</div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-6 text-center">
-              <div className="text-3xl font-bold text-primary mb-1">892</div>
+              <div className="text-3xl font-bold text-primary mb-1">{staticVendors.filter(v => v.verified).length + vendors.length}</div>
               <div className="text-sm text-muted-foreground">Verified</div>
             </CardContent>
           </Card>
@@ -120,9 +173,41 @@ const Vendors = () => {
           </Card>
         </div>
 
-        {/* Vendors Grid */}
+        {/* Database Vendors */}
+        {vendors.length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-2xl font-bold mb-4">New Vendors</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {vendors.map((vendor) => (
+                <Card key={vendor.id} className="hover:shadow-lg transition-all">
+                  <CardContent className="p-6">
+                    <div className="flex items-start gap-4 mb-4">
+                      <div className="w-16 h-16 rounded-lg bg-gradient-primary flex items-center justify-center">
+                        <Store className="h-8 w-8 text-primary-foreground" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="font-semibold text-lg">{vendor.business_name}</h3>
+                          <Verified className="h-5 w-5 text-primary" />
+                        </div>
+                        <p className="text-sm text-muted-foreground line-clamp-2">
+                          {vendor.business_description || 'New vendor on SmartCart'}
+                        </p>
+                      </div>
+                    </div>
+                    <Button className="w-full" variant="outline">
+                      View Store
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Static Vendors Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {vendors.map((vendor, index) => (
+          {filteredStaticVendors.map((vendor, index) => (
             <Card key={index} className="hover:shadow-lg transition-all">
               <CardContent className="p-6">
                 {/* Logo & Verified Badge */}
