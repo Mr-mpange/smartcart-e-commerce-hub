@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,10 +29,29 @@ export const ProductCard = ({
   inStock,
   onAddToCart
 }: ProductCardProps) => {
+  const navigate = useNavigate();
   const discount = originalPrice ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0;
 
+  const handleCardClick = () => {
+    if (id && id !== 'demo') {
+      navigate(`/product/${id}`);
+    }
+  };
+
+  const handleAddToCartClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (id && onAddToCart) {
+      onAddToCart(id);
+    } else if (onAddToCart) {
+      onAddToCart('demo');
+    }
+  };
+
   return (
-    <Card className="group overflow-hidden hover:shadow-lg transition-all duration-300">
+    <Card 
+      className="group overflow-hidden hover:shadow-lg transition-all duration-300 cursor-pointer"
+      onClick={handleCardClick}
+    >
       <div className="relative overflow-hidden">
         <img
           src={image}
@@ -78,14 +98,7 @@ export const ProductCard = ({
         <Button 
           className="w-full bg-gradient-primary hover:opacity-90 transition-opacity" 
           disabled={!inStock}
-          onClick={() => {
-            if (id && onAddToCart) {
-              onAddToCart(id);
-            } else if (onAddToCart) {
-              // For demo products without database IDs
-              onAddToCart('demo');
-            }
-          }}
+          onClick={handleAddToCartClick}
         >
           <ShoppingCart className="mr-2 h-4 w-4" />
           Add to Cart

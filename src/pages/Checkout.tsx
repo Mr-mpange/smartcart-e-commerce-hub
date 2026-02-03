@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
@@ -7,31 +7,99 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
-import { Loader2, ShoppingBag, CreditCard } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
+import { Loader2, ShoppingBag, CreditCard, Smartphone, MapPin } from "lucide-react";
+
+interface CartItem {
+  id: string;
+  quantity: number;
+  product: {
+    id: string;
+    name: string;
+    price: number;
+    image_url: string;
+    vendor_id: string;
+  };
+}
 
 const Checkout = () => {
   const navigate = useNavigate();
-  const { toast } = useToast();
+  const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [loadingCart, setLoadingCart] = useState(true);
   
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     phone: "",
+    address: "",
+    paymentMethod: "mobile_money",
   });
 
-  // Mock cart items - replace with actual cart data
-  const cartItems = [
-    { id: 1, name: "Sample Product", price: 50000, quantity: 2 },
-  ];
-  
-  const subtotal = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  useEffect(() => {
+    if (user) {
+      fetchCartItems();
+      fetchUserProfile();
+    }
+  }, [user]);
+
+  const fetchCartItems = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('cart_items')
+        .select(`
+          id,
+          quantity,
+          product:products (
+            id,
+            name,
+            price,
+            image_url,
+            vendor_id
+          )
+        `)
+        .eq('user_id', user?.id);
+
+      if (error) throw error;
+      setCartItems(data as any || []);
+    } catch (error: any) {
+      toast.error('Failed to load cart');
+    } finally {
+      setLoadingCart(false);
+    }
+  };
+
+  const fetchUserProfile = async () => {
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name, phone')
+        .eq('id', user?.id)
+        .maybeSingle();
+
+      if (profile) {
+        setFormData(prev => ({
+          ...prev,
+          name: profile.full_name || '',
+          phone: profile.phone || '',
+          email: user?.email || '',
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+    }
+  };
+
+  const subtotal = cartItems.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
   const deliveryFee = 5000;
   const total = subtotal + deliveryFee;
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value,
@@ -41,53 +109,126 @@ const Checkout = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.name || !formData.email || !formData.phone) {
-      toast({
-        title: "Missing Information",
-        description: "Please fill in all required fields",
-        variant: "destructive",
-      });
+    if (!formData.name || !formData.email || !formData.phone || !formData.address) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+
+    if (cartItems.length === 0) {
+      toast.error("Your cart is empty");
       return;
     }
 
     setIsLoading(true);
 
     try {
-      const orderId = `ORD-${Date.now()}`;
-      
-      const { data, error } = await supabase.functions.invoke('zenopay-payment', {
-        body: {
-          order_id: orderId,
-          buyer_email: formData.email,
-          buyer_name: formData.name,
-          buyer_phone: formData.phone,
-          amount: total,
-        },
-      });
+      // Create order in database
+      const { data: order, error: orderError } = await supabase
+        .from('orders')
+        .insert([{
+          user_id: user?.id,
+          total_amount: total,
+          delivery_address: formData.address,
+          phone_number: formData.phone,
+          payment_method: formData.paymentMethod,
+          status: 'pending',
+        }])
+        .select()
+        .single();
 
-      if (error) throw error;
+      if (orderError) throw orderError;
 
-      if (data?.success) {
-        toast({
-          title: "Payment Initiated",
-          description: "Please check your phone to complete the payment",
+      // Create order items
+      const orderItems = cartItems.map(item => ({
+        order_id: order.id,
+        product_id: item.product.id,
+        vendor_id: item.product.vendor_id,
+        quantity: item.quantity,
+        price: item.product.price,
+      }));
+
+      const { error: itemsError } = await supabase
+        .from('order_items')
+        .insert(orderItems);
+
+      if (itemsError) throw itemsError;
+
+      // Process payment based on method
+      if (formData.paymentMethod === 'mobile_money') {
+        const { data, error } = await supabase.functions.invoke('zenopay-payment', {
+          body: {
+            order_id: order.id,
+            buyer_email: formData.email,
+            buyer_name: formData.name,
+            buyer_phone: formData.phone,
+            amount: total,
+          },
         });
-        navigate(`/payment-success?order_id=${orderId}`);
+
+        if (error) throw error;
+
+        if (data?.success) {
+          // Clear cart after successful order
+          await supabase
+            .from('cart_items')
+            .delete()
+            .eq('user_id', user?.id);
+
+          toast.success("Payment initiated! Check your phone to complete.");
+          navigate(`/payment-success?order_id=${order.id}`);
+        } else {
+          throw new Error('Payment initiation failed');
+        }
       } else {
-        throw new Error('Payment initiation failed');
+        // Cash on delivery
+        await supabase
+          .from('orders')
+          .update({ status: 'confirmed' })
+          .eq('id', order.id);
+
+        // Clear cart
+        await supabase
+          .from('cart_items')
+          .delete()
+          .eq('user_id', user?.id);
+
+        toast.success("Order placed successfully!");
+        navigate(`/payment-success?order_id=${order.id}`);
       }
-    } catch (error) {
-      console.error('Payment error:', error);
-      toast({
-        title: "Payment Failed",
-        description: "Unable to process payment. Please try again.",
-        variant: "destructive",
-      });
+    } catch (error: any) {
+      console.error('Checkout error:', error);
+      toast.error(error.message || "Failed to process order");
       navigate('/payment-error');
     } finally {
       setIsLoading(false);
     }
   };
+
+  if (loadingCart) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <Navbar />
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        </div>
+      </div>
+    );
+  }
+
+  if (cartItems.length === 0) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <Navbar />
+        <div className="flex-1 flex flex-col items-center justify-center">
+          <ShoppingBag className="h-16 w-16 text-muted-foreground mb-4" />
+          <h2 className="text-2xl font-semibold mb-2">Your cart is empty</h2>
+          <p className="text-muted-foreground mb-6">Add some products before checkout</p>
+          <Button onClick={() => navigate('/products')}>Browse Products</Button>
+        </div>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -102,7 +243,7 @@ const Checkout = () => {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
             {/* Checkout Form */}
-            <div className="lg:col-span-2">
+            <div className="lg:col-span-2 space-y-6">
               <Card>
                 <CardHeader>
                   <CardTitle>Customer Information</CardTitle>
@@ -110,29 +251,31 @@ const Checkout = () => {
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleSubmit} className="space-y-6">
-                    <div className="space-y-2">
-                      <Label htmlFor="name">Full Name *</Label>
-                      <Input
-                        id="name"
-                        name="name"
-                        placeholder="John Doe"
-                        value={formData.name}
-                        onChange={handleInputChange}
-                        required
-                      />
-                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="name">Full Name *</Label>
+                        <Input
+                          id="name"
+                          name="name"
+                          placeholder="John Doe"
+                          value={formData.name}
+                          onChange={handleInputChange}
+                          required
+                        />
+                      </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="email">Email Address *</Label>
-                      <Input
-                        id="email"
-                        name="email"
-                        type="email"
-                        placeholder="john@example.com"
-                        value={formData.email}
-                        onChange={handleInputChange}
-                        required
-                      />
+                      <div className="space-y-2">
+                        <Label htmlFor="email">Email Address *</Label>
+                        <Input
+                          id="email"
+                          name="email"
+                          type="email"
+                          placeholder="john@example.com"
+                          value={formData.email}
+                          onChange={handleInputChange}
+                          required
+                        />
+                      </div>
                     </div>
 
                     <div className="space-y-2">
@@ -151,6 +294,55 @@ const Checkout = () => {
                       </p>
                     </div>
 
+                    <div className="space-y-2">
+                      <Label htmlFor="address" className="flex items-center gap-2">
+                        <MapPin className="h-4 w-4" />
+                        Delivery Address *
+                      </Label>
+                      <Textarea
+                        id="address"
+                        name="address"
+                        placeholder="Street address, city, region..."
+                        value={formData.address}
+                        onChange={handleInputChange}
+                        required
+                        rows={3}
+                      />
+                    </div>
+
+                    <Separator />
+
+                    {/* Payment Method */}
+                    <div className="space-y-4">
+                      <Label>Payment Method</Label>
+                      <RadioGroup
+                        value={formData.paymentMethod}
+                        onValueChange={(value) => setFormData(prev => ({ ...prev, paymentMethod: value }))}
+                        className="grid grid-cols-1 md:grid-cols-2 gap-4"
+                      >
+                        <div className="flex items-center space-x-2 border rounded-lg p-4 cursor-pointer hover:bg-muted/50">
+                          <RadioGroupItem value="mobile_money" id="mobile_money" />
+                          <Label htmlFor="mobile_money" className="flex items-center gap-2 cursor-pointer flex-1">
+                            <Smartphone className="h-5 w-5 text-primary" />
+                            <div>
+                              <p className="font-medium">Mobile Money</p>
+                              <p className="text-xs text-muted-foreground">M-Pesa, TigoPesa, Airtel</p>
+                            </div>
+                          </Label>
+                        </div>
+                        <div className="flex items-center space-x-2 border rounded-lg p-4 cursor-pointer hover:bg-muted/50">
+                          <RadioGroupItem value="cash_on_delivery" id="cash_on_delivery" />
+                          <Label htmlFor="cash_on_delivery" className="flex items-center gap-2 cursor-pointer flex-1">
+                            <CreditCard className="h-5 w-5 text-primary" />
+                            <div>
+                              <p className="font-medium">Cash on Delivery</p>
+                              <p className="text-xs text-muted-foreground">Pay when delivered</p>
+                            </div>
+                          </Label>
+                        </div>
+                      </RadioGroup>
+                    </div>
+
                     <Button 
                       type="submit" 
                       className="w-full" 
@@ -165,7 +357,7 @@ const Checkout = () => {
                       ) : (
                         <>
                           <CreditCard className="mr-2 h-4 w-4" />
-                          Pay with Mobile Money
+                          Place Order - TSh {total.toLocaleString()}
                         </>
                       )}
                     </Button>
@@ -182,13 +374,19 @@ const Checkout = () => {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {cartItems.map((item) => (
-                    <div key={item.id} className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">
-                        {item.name} x{item.quantity}
-                      </span>
-                      <span className="font-medium">
-                        TZS {(item.price * item.quantity).toLocaleString()}
-                      </span>
+                    <div key={item.id} className="flex gap-3">
+                      <img 
+                        src={item.product.image_url || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=100'} 
+                        alt={item.product.name}
+                        className="w-16 h-16 object-cover rounded-lg"
+                      />
+                      <div className="flex-1">
+                        <p className="font-medium line-clamp-1">{item.product.name}</p>
+                        <p className="text-sm text-muted-foreground">Qty: {item.quantity}</p>
+                        <p className="font-semibold text-primary">
+                          TSh {(item.product.price * item.quantity).toLocaleString()}
+                        </p>
+                      </div>
                     </div>
                   ))}
                   
@@ -196,19 +394,19 @@ const Checkout = () => {
                   
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Subtotal</span>
-                    <span className="font-medium">TZS {subtotal.toLocaleString()}</span>
+                    <span className="font-medium">TSh {subtotal.toLocaleString()}</span>
                   </div>
                   
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Delivery Fee</span>
-                    <span className="font-medium">TZS {deliveryFee.toLocaleString()}</span>
+                    <span className="font-medium">TSh {deliveryFee.toLocaleString()}</span>
                   </div>
                   
                   <Separator />
                   
                   <div className="flex justify-between text-lg font-bold">
                     <span>Total</span>
-                    <span className="text-primary">TZS {total.toLocaleString()}</span>
+                    <span className="text-primary">TSh {total.toLocaleString()}</span>
                   </div>
 
                   <div className="pt-4 space-y-2">
