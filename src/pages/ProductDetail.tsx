@@ -105,28 +105,36 @@ const ProductDetail = () => {
 
   const fetchReviews = async () => {
     try {
-      const { data, error } = await supabase
+      const { data: reviewsData, error: reviewsError } = await supabase
         .from('reviews')
-        .select(`
-          *,
-          profile:profiles!reviews_user_id_fkey(full_name)
-        `)
+        .select('*')
         .eq('product_id', id)
         .order('created_at', { ascending: false });
 
-      if (error) {
-        // If foreign key doesn't exist, fetch without profile
-        const { data: reviewsOnly, error: reviewsError } = await supabase
-          .from('reviews')
-          .select('*')
-          .eq('product_id', id)
-          .order('created_at', { ascending: false });
-        
-        if (reviewsError) throw reviewsError;
-        setReviews(reviewsOnly || []);
+      if (reviewsError) {
+        console.error('Error fetching reviews:', reviewsError);
         return;
       }
-      setReviews(data || []);
+
+      // Fetch profiles for all reviewers
+      const userIds = [...new Set(reviewsData?.map(r => r.user_id) || [])];
+      if (userIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .in('id', userIds);
+
+        const profilesMap = new Map(profilesData?.map(p => [p.id, p]) || []);
+
+        const reviewsWithProfiles: Review[] = (reviewsData || []).map(review => ({
+          ...review,
+          profile: profilesMap.get(review.user_id) || { full_name: 'Anonymous' }
+        }));
+
+        setReviews(reviewsWithProfiles);
+      } else {
+        setReviews([]);
+      }
     } catch (error: any) {
       console.error('Error fetching reviews:', error);
     }
