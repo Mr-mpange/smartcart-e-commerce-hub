@@ -19,6 +19,7 @@ import Deals from "./pages/Deals";
 import Vendors from "./pages/Vendors";
 import VendorDashboard from "./pages/VendorDashboard";
 import Profile from "./pages/Profile";
+import ProductDetail from "./pages/ProductDetail";
 
 const queryClient = new QueryClient();
 
@@ -33,6 +34,7 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/products" element={<Products />} />
+            <Route path="/product/:id" element={<ProductDetail />} />
             <Route path="/categories" element={<Categories />} />
             <Route path="/deals" element={<Deals />} />
             <Route path="/vendors" element={<Vendors />} />
