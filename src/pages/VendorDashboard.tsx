@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Package, DollarSign, ShoppingCart, TrendingUp, Plus, Edit, Trash2, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { VendorOrderManagement } from '@/components/VendorOrderManagement';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -483,14 +484,10 @@ export default function VendorDashboard() {
           <TabsContent value="orders">
             <Card>
               <CardHeader>
-                <CardTitle>Recent Orders</CardTitle>
+                <CardTitle>Order Management</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-center py-12">
-                  <ShoppingCart className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">No orders yet</h3>
-                  <p className="text-muted-foreground">Orders will appear here when customers purchase your products</p>
-                </div>
+                <VendorOrderManagement />
               </CardContent>
             </Card>
           </TabsContent>
