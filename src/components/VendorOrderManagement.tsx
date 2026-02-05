@@ -6,10 +6,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
-import { Package, MapPin, Phone, Loader2, CheckCircle2, Clock, Truck, XCircle } from 'lucide-react';
+import { Package, MapPin, Phone, Loader2, CheckCircle2, Clock, Truck, XCircle, MessageSquare } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { sendOrderStatusSMS } from '@/lib/sms';
 
 interface Product {
   id: string;
@@ -171,7 +172,7 @@ export function VendorOrderManagement() {
     }
   };
 
-  const handleStatusUpdate = async (orderId: string, newStatus: string) => {
+  const handleStatusUpdate = async (orderId: string, newStatus: string, phoneNumber: string) => {
     setUpdatingStatus(orderId);
     try {
       const { error } = await supabase
@@ -189,6 +190,17 @@ export function VendorOrderManagement() {
       ));
 
       toast.success('Order status updated');
+
+      // Send SMS notification (don't block on this)
+      sendOrderStatusSMS(orderId, newStatus as any, phoneNumber).then(result => {
+        if (result.success) {
+          toast.success('SMS notification sent to customer', {
+            icon: <MessageSquare className="h-4 w-4" />,
+          });
+        } else {
+          console.warn('SMS notification failed:', result.error);
+        }
+      });
     } catch (error: any) {
       console.error('Error updating order status:', error);
       toast.error('Failed to update order status');
@@ -280,7 +292,7 @@ export function VendorOrderManagement() {
                     </Badge>
                     <Select
                       value={orderInfo.status}
-                      onValueChange={(value) => handleStatusUpdate(orderId, value)}
+                      onValueChange={(value) => handleStatusUpdate(orderId, value, orderInfo.phone_number)}
                       disabled={updatingStatus === orderId}
                     >
                       <SelectTrigger className="w-[160px]">
