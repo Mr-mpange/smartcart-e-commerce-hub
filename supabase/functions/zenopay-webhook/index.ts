@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -19,7 +19,6 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Extract order info from webhook payload
-    // ZenoPay webhook structure may vary - adjust based on actual response
     const orderId = payload.order_id || payload.reference || payload.metadata?.order_id;
     const status = payload.status || payload.transaction_status;
     const isSuccess = status === 'SUCCESS' || status === 'COMPLETED' || payload.success === true;
@@ -80,11 +79,9 @@ Deno.serve(async (req) => {
           console.log('SMS notification result:', JSON.stringify(smsResult));
         } catch (smsError) {
           console.error('Failed to send SMS notification:', smsError);
-          // Don't fail the webhook just because SMS failed
         }
       }
     } else {
-      // Payment failed - update status if needed
       console.log(`Payment failed for order ${orderId}`);
     }
     
