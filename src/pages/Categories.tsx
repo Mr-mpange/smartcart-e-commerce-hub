@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { Navbar } from "@/components/Navbar";
+import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -59,7 +60,7 @@ const categories = [
   { 
     name: "Sports & Outdoors", 
     count: 178, 
-    image: "https://images.unsplash.com/photo-1461896836934- voices-4-1dde7ec9d6b4?w=400&h=300&fit=crop",
+    image: "https://images.unsplash.com/photo-1517649763962-0c623066013b?w=400&h=300&fit=crop",
     trending: false
   },
   { 
@@ -96,18 +97,23 @@ const Categories = () => {
     <div className="min-h-screen bg-background">
       <Navbar />
       
+      {/* Hero Header with Background */}
+      <PageHeader
+        title="Shop by Category"
+        subtitle="Browse our wide range of categories with thousands of products from verified vendors."
+        backgroundImage="https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=1920&h=600&fit=crop"
+        overlay="dark"
+      />
+      
       <div className="container mx-auto px-4 py-8">
-        {/* Header with Search */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2">Shop by Category</h1>
-          <p className="text-muted-foreground mb-6">Browse products by category</p>
-          
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        {/* Search Bar */}
+        <div className="mb-8 max-w-2xl -mt-6 relative z-10">
+          <div className="relative bg-background rounded-lg shadow-lg p-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
             <Input
               type="search"
               placeholder="Search categories..."
-              className="pl-10"
+              className="pl-12 h-12 text-lg border-0 focus-visible:ring-0"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />

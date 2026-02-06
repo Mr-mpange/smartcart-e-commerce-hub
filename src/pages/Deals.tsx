@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { Navbar } from "@/components/Navbar";
+import { PageHeader } from "@/components/PageHeader";
 import { ProductCard } from "@/components/ProductCard";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +23,7 @@ const deals = [
     name: "Professional Camera Bundle",
     price: 449999,
     originalPrice: 699999,
-    image: "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=500",
+    image: "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=500",
     rating: 4.7,
     reviews: 124,
     vendor: "PhotoPro",
@@ -48,6 +49,46 @@ const deals = [
     vendor: "SmartLife",
     inStock: true,
   },
+  {
+    name: "Wireless Earbuds Pro",
+    price: 149999,
+    originalPrice: 249999,
+    image: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=500",
+    rating: 4.9,
+    reviews: 567,
+    vendor: "AudioMax",
+    inStock: true,
+  },
+  {
+    name: "4K Action Camera",
+    price: 299999,
+    originalPrice: 449999,
+    image: "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=500",
+    rating: 4.7,
+    reviews: 234,
+    vendor: "AdventureCam",
+    inStock: true,
+  },
+  {
+    name: "Smart Watch Series 5",
+    price: 399999,
+    originalPrice: 549999,
+    image: "https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=500",
+    rating: 4.8,
+    reviews: 892,
+    vendor: "WearTech",
+    inStock: true,
+  },
+  {
+    name: "Mechanical Gaming Keyboard",
+    price: 179999,
+    originalPrice: 279999,
+    image: "https://images.unsplash.com/photo-1595225476474-87563907a212?w=500",
+    rating: 4.6,
+    reviews: 445,
+    vendor: "GamerZone",
+    inStock: true,
+  },
 ];
 
 const Deals = () => {
@@ -69,28 +110,20 @@ const Deals = () => {
     <div className="min-h-screen bg-background">
       <Navbar />
       
+      {/* Hero Header with Background */}
+      <PageHeader
+        title="Hot Deals & Offers"
+        subtitle="Save big on amazing products from top vendors. Limited time offers you don't want to miss!"
+        backgroundImage="https://images.unsplash.com/photo-1607082350899-7e105aa886ae?w=1920&h=600&fit=crop"
+        overlay="primary"
+      >
+        <Badge variant="secondary" className="bg-white/20 text-white border-0 px-4 py-2">
+          <Clock className="h-4 w-4 mr-2" />
+          Deals ending soon!
+        </Badge>
+      </PageHeader>
+
       <div className="container mx-auto px-4 py-8">
-        {/* Hero Banner */}
-        <Card className="mb-8 overflow-hidden bg-gradient-hero">
-          <CardContent className="p-8 md:p-12">
-            <div className="flex items-center gap-2 mb-4">
-              <Flame className="h-8 w-8 text-primary-foreground" />
-              <Badge variant="secondary" className="bg-white/20 text-white border-0">
-                Limited Time
-              </Badge>
-            </div>
-            <h1 className="text-4xl md:text-5xl font-bold text-primary-foreground mb-2">
-              Hot Deals & Offers
-            </h1>
-            <p className="text-lg text-primary-foreground/90 mb-6">
-              Save big on amazing products from top vendors
-            </p>
-            <div className="flex items-center gap-2 text-primary-foreground">
-              <Clock className="h-5 w-5" />
-              <span className="font-semibold">Deals ending soon!</span>
-            </div>
-          </CardContent>
-        </Card>
 
         {/* Deal Categories */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
