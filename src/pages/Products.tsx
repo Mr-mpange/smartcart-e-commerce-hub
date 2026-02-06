@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Navbar } from "@/components/Navbar";
+import { PageHeader } from "@/components/PageHeader";
 import { ProductCard } from "@/components/ProductCard";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -102,41 +103,45 @@ const Products = () => {
     <div className="min-h-screen bg-background">
       <Navbar />
       
+      {/* Hero Header with Background */}
+      <PageHeader
+        title="All Products"
+        subtitle="Discover amazing products from trusted vendors across East Africa. Quality guaranteed with buyer protection."
+        backgroundImage="https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=1920&h=600&fit=crop"
+        overlay="dark"
+      />
+
       <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2">All Products</h1>
-          <p className="text-muted-foreground">Discover amazing products from trusted vendors</p>
-        </div>
+        {/* Filters - Floating search bar */}
+        <div className="mb-8 -mt-6 relative z-10">
+          <div className="bg-background rounded-xl shadow-lg p-4 flex flex-col md:flex-row gap-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Search products..."
+                className="pl-10 h-12"
+              />
+            </div>
+            
+            <div className="flex gap-2">
+              <Select defaultValue="featured">
+                <SelectTrigger className="w-[180px] h-12">
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="featured">Featured</SelectItem>
+                  <SelectItem value="price-low">Price: Low to High</SelectItem>
+                  <SelectItem value="price-high">Price: High to Low</SelectItem>
+                  <SelectItem value="rating">Top Rated</SelectItem>
+                  <SelectItem value="newest">Newest</SelectItem>
+                </SelectContent>
+              </Select>
 
-        {/* Filters */}
-        <div className="mb-8 flex flex-col md:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search products..."
-              className="pl-10"
-            />
-          </div>
-          
-          <div className="flex gap-2">
-            <Select defaultValue="featured">
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Sort by" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="featured">Featured</SelectItem>
-                <SelectItem value="price-low">Price: Low to High</SelectItem>
-                <SelectItem value="price-high">Price: High to Low</SelectItem>
-                <SelectItem value="rating">Top Rated</SelectItem>
-                <SelectItem value="newest">Newest</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Button variant="outline" size="icon">
-              <SlidersHorizontal className="h-4 w-4" />
-            </Button>
+              <Button variant="outline" size="icon" className="h-12 w-12">
+                <SlidersHorizontal className="h-5 w-5" />
+              </Button>
+            </div>
           </div>
         </div>
 
