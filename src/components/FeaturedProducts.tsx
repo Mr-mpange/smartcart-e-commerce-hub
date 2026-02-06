@@ -1,85 +1,89 @@
 import { useNavigate } from "react-router-dom";
 import { ProductCard } from "./ProductCard";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { ArrowRight, Package } from "lucide-react";
 import { toast } from "sonner";
 
 const products = [
   {
-    name: "Premium Wireless Headphones",
-    price: 89999,
-    originalPrice: 129999,
-    image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop",
-    rating: 4.8,
-    reviews: 234,
-    vendor: "TechVendor Pro",
-    inStock: true
-  },
-  {
-    name: "Smart Fitness Watch",
-    price: 199999,
-    originalPrice: 249999,
-    image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&h=500&fit=crop",
-    rating: 4.6,
-    reviews: 189,
-    vendor: "FitGear Store",
-    inStock: true
-  },
-  {
-    name: "Designer Backpack",
-    price: 59999,
-    image: "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=500&h=500&fit=crop",
+    name: "MacBook Pro 14\" M3 Chip",
+    price: 4899999,
+    originalPrice: 5499999,
+    image: "https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=500&h=500&fit=crop",
     rating: 4.9,
-    reviews: 412,
+    reviews: 1234,
+    vendor: "Apple Store TZ",
+    inStock: true
+  },
+  {
+    name: "iPhone 15 Pro Max 256GB",
+    price: 3299999,
+    originalPrice: 3599999,
+    image: "https://images.unsplash.com/photo-1592750475338-74b7b21085ab?w=500&h=500&fit=crop",
+    rating: 4.8,
+    reviews: 2189,
+    vendor: "Apple Store TZ",
+    inStock: true
+  },
+  {
+    name: "Designer Leather Handbag",
+    price: 299999,
+    originalPrice: 459999,
+    image: "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=500&h=500&fit=crop",
+    rating: 4.7,
+    reviews: 892,
     vendor: "Fashion Hub",
     inStock: true
   },
   {
-    name: "Professional Camera Lens",
-    price: 449999,
-    originalPrice: 599999,
-    image: "https://images.unsplash.com/photo-1617005082133-548c4dd27f35?w=500&h=500&fit=crop",
-    rating: 4.7,
-    reviews: 156,
+    name: "Canon EOS R5 Camera Body",
+    price: 8999999,
+    originalPrice: 9999999,
+    image: "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=500&h=500&fit=crop",
+    rating: 4.9,
+    reviews: 456,
     vendor: "PhotoPro Shop",
     inStock: true
   },
   {
-    name: "Ergonomic Office Chair",
-    price: 299999,
-    image: "https://images.unsplash.com/photo-1580480055273-228ff5388ef8?w=500&h=500&fit=crop",
-    rating: 4.5,
-    reviews: 98,
-    vendor: "Office Essentials",
+    name: "LG 55\" OLED 4K Smart TV",
+    price: 2499999,
+    originalPrice: 2999999,
+    image: "https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?w=500&h=500&fit=crop",
+    rating: 4.8,
+    reviews: 678,
+    vendor: "Electronics Hub",
+    inStock: true
+  },
+  {
+    name: "Dyson V15 Vacuum Cleaner",
+    price: 1599999,
+    originalPrice: 1899999,
+    image: "https://images.unsplash.com/photo-1558317374-067fb5f30001?w=500&h=500&fit=crop",
+    rating: 4.7,
+    reviews: 345,
+    vendor: "Home Essentials",
     inStock: false
   },
   {
-    name: "Portable Bluetooth Speaker",
-    price: 49999,
-    originalPrice: 79999,
-    image: "https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?w=500&h=500&fit=crop",
-    rating: 4.4,
-    reviews: 302,
+    name: "Ray-Ban Aviator Sunglasses",
+    price: 249999,
+    originalPrice: 349999,
+    image: "https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=500&h=500&fit=crop",
+    rating: 4.6,
+    reviews: 1567,
+    vendor: "Fashion Forward",
+    inStock: true
+  },
+  {
+    name: "Bose QuietComfort Earbuds",
+    price: 549999,
+    originalPrice: 699999,
+    image: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=500&h=500&fit=crop",
+    rating: 4.8,
+    reviews: 923,
     vendor: "AudioMax",
-    inStock: true
-  },
-  {
-    name: "Organic Green Tea Set",
-    price: 24999,
-    image: "https://images.unsplash.com/photo-1556679343-c7306c1976bc?w=500&h=500&fit=crop",
-    rating: 4.9,
-    reviews: 567,
-    vendor: "Natural Goods",
-    inStock: true
-  },
-  {
-    name: "Gaming Keyboard RGB",
-    price: 129999,
-    originalPrice: 179999,
-    image: "https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=500&h=500&fit=crop",
-    rating: 4.7,
-    reviews: 223,
-    vendor: "Gamers Paradise",
     inStock: true
   }
 ];
@@ -96,20 +100,25 @@ export const FeaturedProducts = () => {
     }
 
     const product = products[productIndex];
-    
-    // For featured products (demo), we'll show a success message
-    // In production, these would be real products from the database
     toast.success(`${product.name} added to cart!`);
   };
 
   return (
     <section className="py-16 bg-secondary/30">
       <div className="container mx-auto px-4">
-        <div className="text-center mb-12">
-          <h2 className="text-4xl font-bold mb-4">Featured Products</h2>
-          <p className="text-xl text-muted-foreground">
-            Discover our handpicked selection of trending items
-          </p>
+        <div className="flex items-center justify-between mb-10">
+          <div className="flex items-center gap-3">
+            <div className="bg-primary/10 p-2 rounded-lg">
+              <Package className="h-6 w-6 text-primary" />
+            </div>
+            <div>
+              <h2 className="text-3xl font-bold">Featured Products</h2>
+              <p className="text-muted-foreground">Handpicked selection of trending items</p>
+            </div>
+          </div>
+          <Button variant="outline" onClick={() => navigate('/products')}>
+            View All <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
         </div>
         
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
