@@ -9,10 +9,20 @@ import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { ProductCard } from '@/components/ProductCard';
+import { ProductViewer3D } from '@/components/ProductViewer3D';
 import { Star, ShoppingCart, Minus, Plus, Truck, Shield, RotateCcw, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+
+// Default color swatches for products
+const defaultColorSwatches = [
+  { name: 'Default', color: '#374151' },
+  { name: 'Space Black', color: '#1F2937' },
+  { name: 'Silver', color: '#9CA3AF' },
+  { name: 'Rose Gold', color: '#F472B6' },
+  { name: 'Ocean Blue', color: '#3B82F6' },
+];
 
 interface Product {
   id: string;
@@ -308,15 +318,19 @@ const ProductDetail = () => {
       <main className="flex-1 container mx-auto px-4 py-8">
         {/* Product Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
-          {/* Product Image */}
+          {/* 3D Product Viewer */}
           <div className="space-y-4">
-            <div className="aspect-square rounded-2xl overflow-hidden bg-muted">
-              <img
-                src={product.image_url || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800'}
-                alt={product.name}
-                className="w-full h-full object-cover"
-              />
-            </div>
+            <ProductViewer3D
+              images={[
+                product.image_url || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800',
+                product.image_url?.replace('w=800', 'w=801') || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=801',
+                product.image_url?.replace('w=800', 'w=802') || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=802',
+                product.image_url?.replace('w=800', 'w=803') || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=803',
+              ]}
+              productName={product.name}
+              colorSwatches={defaultColorSwatches}
+              className="rounded-2xl"
+            />
           </div>
 
           {/* Product Info */}

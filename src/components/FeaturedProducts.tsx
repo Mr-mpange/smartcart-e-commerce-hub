@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { ProductCard } from "./ProductCard";
+import { ProductCardWithViewer } from "./ProductCardWithViewer";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Package } from "lucide-react";
@@ -123,9 +123,16 @@ export const FeaturedProducts = () => {
         
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {products.map((product, index) => (
-            <ProductCard 
+            <ProductCardWithViewer 
               key={index} 
-              {...product} 
+              {...product}
+              id="demo"
+              colorSwatches={[
+                { name: 'Space Gray', color: '#4B5563' },
+                { name: 'Silver', color: '#9CA3AF' },
+                { name: 'Gold', color: '#F59E0B' },
+                { name: 'Blue', color: '#3B82F6' },
+              ]}
               onAddToCart={() => handleAddToCart(index)}
             />
           ))}

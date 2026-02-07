@@ -1,10 +1,12 @@
+import { useState } from 'react';
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Star, ShoppingCart, TrendingUp, ArrowRight } from "lucide-react";
+import { Star, ShoppingCart, TrendingUp, ArrowRight, Eye, RotateCcw } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { QuickViewModal } from "./QuickViewModal";
 
 const trendingProducts = [
   {
@@ -56,6 +58,7 @@ const trendingProducts = [
 export const TrendingProducts = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [quickViewProduct, setQuickViewProduct] = useState<typeof trendingProducts[0] | null>(null);
 
   const handleAddToCart = (productName: string) => {
     if (!user) {
@@ -65,6 +68,13 @@ export const TrendingProducts = () => {
     }
     toast.success(`${productName} added to cart!`);
   };
+
+  const defaultSwatches = [
+    { name: 'Midnight', color: '#1F2937' },
+    { name: 'Starlight', color: '#F5F5DC' },
+    { name: 'Purple', color: '#9333EA' },
+    { name: 'Blue', color: '#2563EB' },
+  ];
 
   return (
     <section className="py-12">
@@ -100,13 +110,35 @@ export const TrendingProducts = () => {
                     alt={product.name}
                     className="w-full h-56 object-cover group-hover:scale-105 transition-transform duration-500"
                   />
-                  <Badge className="absolute top-3 left-3 bg-red-500">
-                    -{discount}%
-                  </Badge>
+                  <div className="absolute top-3 left-3 flex flex-col gap-2">
+                    <Badge className="bg-red-500">
+                      -{discount}%
+                    </Badge>
+                    <Badge className="bg-primary/90 flex items-center gap-1">
+                      <RotateCcw className="h-3 w-3" />
+                      360°
+                    </Badge>
+                  </div>
                   <Badge className="absolute top-3 right-3 bg-primary/90">
                     <TrendingUp className="h-3 w-3 mr-1" />
                     Trending
                   </Badge>
+                  
+                  {/* Quick View Overlay */}
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="gap-2 bg-background/90"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setQuickViewProduct(product);
+                      }}
+                    >
+                      <Eye className="h-4 w-4" />
+                      Quick View 3D
+                    </Button>
+                  </div>
                 </div>
                 <CardContent className="p-4 space-y-3">
                   <p className="text-xs text-muted-foreground">{product.vendor}</p>
@@ -131,6 +163,18 @@ export const TrendingProducts = () => {
                       TSh {product.originalPrice.toLocaleString()}
                     </span>
                   </div>
+
+                  {/* Color Swatches */}
+                  <div className="flex items-center gap-1 pt-1">
+                    {defaultSwatches.map((swatch, index) => (
+                      <div
+                        key={index}
+                        className="w-5 h-5 rounded-full border-2 border-background shadow-sm"
+                        style={{ backgroundColor: swatch.color }}
+                        title={swatch.name}
+                      />
+                    ))}
+                  </div>
                   
                   <Button 
                     className="w-full bg-gradient-primary hover:opacity-90"
@@ -147,6 +191,26 @@ export const TrendingProducts = () => {
             );
           })}
         </div>
+
+        {/* Quick View Modal */}
+        {quickViewProduct && (
+          <QuickViewModal
+            isOpen={!!quickViewProduct}
+            onClose={() => setQuickViewProduct(null)}
+            product={{
+              id: quickViewProduct.id,
+              name: quickViewProduct.name,
+              price: quickViewProduct.price,
+              originalPrice: quickViewProduct.originalPrice,
+              images: [quickViewProduct.image],
+              rating: quickViewProduct.rating,
+              reviews: quickViewProduct.reviews,
+              vendor: quickViewProduct.vendor,
+              inStock: true,
+              colorSwatches: defaultSwatches
+            }}
+          />
+        )}
       </div>
     </section>
   );
