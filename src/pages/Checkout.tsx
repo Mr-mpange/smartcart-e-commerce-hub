@@ -155,7 +155,7 @@ const Checkout = () => {
 
       // Process payment based on method
       if (formData.paymentMethod === 'mobile_money') {
-        const { data, error } = await supabase.functions.invoke('zenopay-payment', {
+        const { data, error } = await supabase.functions.invoke('snippe-payment', {
           body: {
             order_id: order.id,
             buyer_email: formData.email,
@@ -412,7 +412,7 @@ const Checkout = () => {
                   <div className="pt-4 space-y-2">
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <CreditCard className="h-4 w-4" />
-                      <span>Secure payment via ZenoPay</span>
+                      <span>Secure payment via Snippe</span>
                     </div>
                     <p className="text-xs text-muted-foreground">
                       Supports M-Pesa, TigoPesa, and Airtel Money

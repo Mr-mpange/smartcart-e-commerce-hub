@@ -33,11 +33,29 @@ const Products = () => {
 
   const fetchProducts = async () => {
     try {
-      const { data, error } = await supabase
+      // First get approved vendor IDs
+      const { data: approvedVendors } = await supabase
+        .from('vendor_profiles')
+        .select('user_id')
+        .eq('is_approved', true);
+
+      const approvedIds = approvedVendors?.map(v => v.user_id) || [];
+
+      let query = supabase
         .from('products')
         .select('*')
         .eq('is_active', true)
         .order('created_at', { ascending: false });
+
+      // Only show products from approved vendors (if we have approved vendors)
+      if (approvedIds.length > 0) {
+        query = query.in('vendor_id', approvedIds);
+      } else {
+        // No approved vendors = no products to show from DB vendors
+        query = query.in('vendor_id', ['none']);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       setProducts(data || []);
