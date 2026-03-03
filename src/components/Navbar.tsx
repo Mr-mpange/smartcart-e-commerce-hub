@@ -1,4 +1,4 @@
-import { ShoppingCart, User, Search, Menu, LogOut, Package, LayoutDashboard } from "lucide-react";
+import { ShoppingCart, User, Search, Menu, LogOut, Package, LayoutDashboard, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -122,6 +122,15 @@ export const Navbar = () => {
                         <DropdownMenuItem onClick={() => navigate('/vendor/dashboard')}>
                           <LayoutDashboard className="mr-2 h-4 w-4" />
                           Vendor Dashboard
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                    {userRole === 'admin' && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => navigate('/admin/dashboard')}>
+                          <Shield className="mr-2 h-4 w-4" />
+                          Admin Dashboard
                         </DropdownMenuItem>
                       </>
                     )}
