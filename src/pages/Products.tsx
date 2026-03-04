@@ -81,7 +81,7 @@ const Products = () => {
         .select('id, quantity')
         .eq('user_id', user.id)
         .eq('product_id', productId)
-        .single();
+        .maybeSingle();
 
       if (existingItem) {
         // Update quantity
