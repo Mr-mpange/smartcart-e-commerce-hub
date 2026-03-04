@@ -29,7 +29,7 @@ export default function Profile() {
         .from('profiles')
         .select('*')
         .eq('id', user?.id)
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
       if (data) {
