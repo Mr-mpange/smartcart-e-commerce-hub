@@ -16,6 +16,21 @@ export const Navbar = () => {
   useEffect(() => {
     if (user) {
       fetchCartCount();
+      // Subscribe to cart changes for real-time badge updates
+      const channel = supabase
+        .channel('cart-count')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'cart_items',
+            filter: `user_id=eq.${user.id}`,
+          },
+          () => fetchCartCount()
+        )
+        .subscribe();
+      return () => { supabase.removeChannel(channel); };
     } else {
       setCartCount(0);
     }
