@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Package, DollarSign, ShoppingCart, TrendingUp, Plus, Edit, Trash2, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { ProductImageUpload } from '@/components/ProductImageUpload';
 import { VendorOrderManagement } from '@/components/VendorOrderManagement';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -328,17 +329,10 @@ export default function VendorDashboard() {
                     />
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="image">Image URL</Label>
-                  <Input
-                    id="image"
-                    type="url"
-                    value={formData.image_url}
-                    onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
-                    placeholder="https://example.com/image.jpg"
-                  />
-                  <p className="text-xs text-muted-foreground">Leave blank to use a default image</p>
-                </div>
+                <ProductImageUpload
+                  currentUrl={formData.image_url}
+                  onImageUploaded={(url) => setFormData({ ...formData, image_url: url })}
+                />
                 <Button type="submit" className="w-full bg-gradient-primary">
                   {editingProduct ? 'Update Product' : 'Add Product'}
                 </Button>
