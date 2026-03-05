@@ -11,6 +11,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AdminSidebar } from "@/components/AdminSidebar";
 import { AdminRevenueAnalytics } from "@/components/AdminRevenueAnalytics";
 import { AdminOrderManagement } from "@/components/AdminOrderManagement";
+import { AdminWalletManagement } from "@/components/AdminWalletManagement";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -264,6 +265,7 @@ const AdminDashboard = () => {
               {activeTab === "overview" && renderOverview()}
               {activeTab === "orders" && <AdminOrderManagement />}
               {activeTab === "vendors" && renderVendors()}
+              {activeTab === "wallets" && <AdminWalletManagement />}
               {activeTab === "analytics" && <AdminRevenueAnalytics />}
             </div>
           </main>

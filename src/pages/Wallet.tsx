@@ -74,6 +74,10 @@ const Wallet = () => {
   const [topUpAmount, setTopUpAmount] = useState("");
   const [topUpOpen, setTopUpOpen] = useState(false);
   const [topUpLoading, setTopUpLoading] = useState(false);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [withdrawPhone, setWithdrawPhone] = useState("");
+  const [withdrawLoading, setWithdrawLoading] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -172,6 +176,47 @@ const Wallet = () => {
     }
   };
 
+  const handleWithdraw = async () => {
+    const amount = parseFloat(withdrawAmount);
+    if (!amount || amount <= 0 || !wallet) {
+      toast.error("Enter a valid amount");
+      return;
+    }
+    if (amount > wallet.balance) {
+      toast.error("Insufficient balance");
+      return;
+    }
+    if (!withdrawPhone || withdrawPhone.length < 9) {
+      toast.error("Enter a valid phone number");
+      return;
+    }
+    setWithdrawLoading(true);
+    try {
+      const { error: updateError } = await supabase
+        .from("wallets")
+        .update({ balance: wallet.balance - amount })
+        .eq("id", wallet.id);
+      if (updateError) throw updateError;
+
+      await supabase.from("wallet_transactions").insert({
+        wallet_id: wallet.id,
+        type: "withdrawal",
+        amount,
+        description: `Withdrawal to ${withdrawPhone}`,
+      });
+
+      toast.success(`TSh ${amount.toLocaleString()} withdrawal initiated to ${withdrawPhone}`);
+      setWithdrawAmount("");
+      setWithdrawPhone("");
+      setWithdrawOpen(false);
+      fetchWalletData();
+    } catch (err: any) {
+      toast.error("Withdrawal failed");
+    } finally {
+      setWithdrawLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex flex-col">
@@ -206,7 +251,7 @@ const Wallet = () => {
                   TSh {(wallet?.balance || 0).toLocaleString()}
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="flex gap-2 flex-wrap">
                 <Dialog open={topUpOpen} onOpenChange={setTopUpOpen}>
                   <DialogTrigger asChild>
                     <Button>
@@ -240,6 +285,54 @@ const Wallet = () => {
                     </div>
                   </DialogContent>
                 </Dialog>
+
+                {(userRole === "vendor" || userRole === "admin") && (
+                  <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>
+                    <DialogTrigger asChild>
+                      <Button variant="outline">
+                        <ArrowUpRight className="mr-2 h-4 w-4" />
+                        Withdraw
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Withdraw to Mobile Money</DialogTitle>
+                        <DialogDescription>Enter amount and your mobile money number</DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4 pt-4">
+                        <Input
+                          type="number"
+                          placeholder="Amount in TSh"
+                          value={withdrawAmount}
+                          onChange={(e) => setWithdrawAmount(e.target.value)}
+                        />
+                        <div className="flex gap-2">
+                          {[10000, 50000, 100000].map((amt) => (
+                            <Button key={amt} variant="outline" size="sm" onClick={() => setWithdrawAmount(String(amt))}>
+                              {amt.toLocaleString()}
+                            </Button>
+                          ))}
+                          <Button variant="outline" size="sm" onClick={() => setWithdrawAmount(String(wallet?.balance || 0))}>
+                            All
+                          </Button>
+                        </div>
+                        <Input
+                          type="tel"
+                          placeholder="+255 XXX XXX XXX"
+                          value={withdrawPhone}
+                          onChange={(e) => setWithdrawPhone(e.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Supports M-Pesa, TigoPesa, and Airtel Money
+                        </p>
+                        <Button className="w-full" onClick={handleWithdraw} disabled={withdrawLoading}>
+                          {withdrawLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowUpRight className="mr-2 h-4 w-4" />}
+                          Withdraw TSh {parseFloat(withdrawAmount || "0").toLocaleString()}
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                )}
               </CardContent>
             </Card>
 
