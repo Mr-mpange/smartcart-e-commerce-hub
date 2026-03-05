@@ -153,6 +153,27 @@ const Checkout = () => {
 
       if (itemsError) throw itemsError;
 
+      // Create escrow entries per vendor
+      const vendorTotals = new Map<string, number>();
+      cartItems.forEach(item => {
+        const current = vendorTotals.get(item.product.vendor_id) || 0;
+        vendorTotals.set(item.product.vendor_id, current + (item.product.price * item.quantity));
+      });
+
+      const COMMISSION_RATE = 0.05;
+      for (const [vendorId, vendorAmount] of vendorTotals) {
+        const commissionAmount = Math.round(vendorAmount * COMMISSION_RATE);
+        await supabase.from('escrows').insert({
+          order_id: order.id,
+          buyer_id: user?.id,
+          vendor_id: vendorId,
+          amount: vendorAmount,
+          commission_rate: COMMISSION_RATE,
+          commission_amount: commissionAmount,
+          status: 'held',
+        });
+      }
+
       // Process payment based on method
       if (formData.paymentMethod === 'mobile_money') {
         const { data, error } = await supabase.functions.invoke('snippe-payment', {
@@ -168,31 +189,21 @@ const Checkout = () => {
         if (error) throw error;
 
         if (data?.success) {
-          // Clear cart after successful order
-          await supabase
-            .from('cart_items')
-            .delete()
-            .eq('user_id', user?.id);
-
-          toast.success("Payment initiated! Check your phone to complete.");
+          await supabase.from('cart_items').delete().eq('user_id', user?.id);
+          toast.success("Payment initiated! Funds held in escrow until delivery.");
           navigate(`/payment-success?order_id=${order.id}`);
         } else {
           throw new Error('Payment initiation failed');
         }
       } else {
-        // Cash on delivery
+        // Cash on delivery — still create escrow, confirm order
         await supabase
           .from('orders')
           .update({ status: 'confirmed' })
           .eq('id', order.id);
 
-        // Clear cart
-        await supabase
-          .from('cart_items')
-          .delete()
-          .eq('user_id', user?.id);
-
-        toast.success("Order placed successfully!");
+        await supabase.from('cart_items').delete().eq('user_id', user?.id);
+        toast.success("Order placed! Funds held in escrow until delivery.");
         navigate(`/payment-success?order_id=${order.id}`);
       }
     } catch (error: any) {

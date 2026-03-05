@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Package, Clock, CheckCircle2, XCircle, Truck, MapPin, Phone, Loader2 } from "lucide-react";
+import { Package, Clock, CheckCircle2, XCircle, Truck, MapPin, Phone, Loader2, Shield } from "lucide-react";
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -31,6 +31,8 @@ interface Order {
   delivery_address: string;
   phone_number: string;
   order_items?: OrderItem[];
+  escrow_status?: string;
+  escrow_id?: string;
 }
 
 const statusSteps = ['pending', 'confirmed', 'processing', 'shipped', 'out_for_delivery', 'delivered'];
@@ -106,10 +108,12 @@ const Orders = () => {
 
       if (error) throw error;
 
-      // Fetch product details for each order item
+      // Fetch product details and escrow status
       const ordersWithProducts = await Promise.all(
         (data || []).map(async (order) => {
           const productIds = order.order_items?.map((item: OrderItem) => item.product_id).filter(Boolean) || [];
+          let orderWithProducts = order;
+          
           if (productIds.length > 0) {
             const { data: products } = await supabase
               .from('products')
@@ -117,8 +121,7 @@ const Orders = () => {
               .in('id', productIds);
 
             const productsMap = new Map(products?.map((p) => [p.id, p]) || []);
-
-            return {
+            orderWithProducts = {
               ...order,
               order_items: order.order_items?.map((item: OrderItem) => ({
                 ...item,
@@ -126,7 +129,20 @@ const Orders = () => {
               })),
             };
           }
-          return order;
+
+          // Fetch escrow status for this order
+          const { data: escrowData } = await supabase
+            .from('escrows')
+            .select('id, status')
+            .eq('order_id', order.id)
+            .eq('buyer_id', user.id)
+            .limit(1);
+
+          return {
+            ...orderWithProducts,
+            escrow_status: escrowData?.[0]?.status || null,
+            escrow_id: escrowData?.[0]?.id || null,
+          };
         })
       );
 
@@ -136,6 +152,36 @@ const Orders = () => {
       toast.error('Failed to load orders');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleConfirmDelivery = async (orderId: string) => {
+    try {
+      // Find all escrows for this order
+      const { data: escrowsData, error: escrowError } = await supabase
+        .from('escrows')
+        .select('id')
+        .eq('order_id', orderId)
+        .eq('buyer_id', user!.id)
+        .eq('status', 'held');
+
+      if (escrowError) throw escrowError;
+
+      // Release each escrow via the database function
+      for (const escrow of escrowsData || []) {
+        const { data: released, error: releaseError } = await supabase
+          .rpc('release_escrow', { _escrow_id: escrow.id, _caller_id: user!.id });
+        if (releaseError) throw releaseError;
+      }
+
+      // Update order status to delivered
+      await supabase.from('orders').update({ status: 'delivered' }).eq('id', orderId);
+
+      toast.success("Delivery confirmed! Funds released to seller.");
+      fetchOrders();
+    } catch (err: any) {
+      console.error('Confirm delivery error:', err);
+      toast.error("Failed to confirm delivery");
     }
   };
 
@@ -342,6 +388,29 @@ const Orders = () => {
                             </p>
                           </div>
                         </div>
+
+                        {/* Escrow Status & Confirm Delivery */}
+                        {order.escrow_status === 'held' && order.status !== 'delivered' && order.status !== 'cancelled' && (
+                          <div className="flex items-center justify-between p-4 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                            <div className="flex items-center gap-2">
+                              <Shield className="h-5 w-5 text-amber-600" />
+                              <div>
+                                <p className="font-medium text-sm">Funds held in escrow</p>
+                                <p className="text-xs text-muted-foreground">Confirm delivery to release payment to seller</p>
+                              </div>
+                            </div>
+                            <Button size="sm" onClick={() => handleConfirmDelivery(order.id)}>
+                              <CheckCircle2 className="mr-1 h-4 w-4" />
+                              Confirm Delivery
+                            </Button>
+                          </div>
+                        )}
+                        {order.escrow_status === 'released' && (
+                          <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950/20 rounded-lg">
+                            <CheckCircle2 className="h-4 w-4 text-green-600" />
+                            <p className="text-sm text-green-700 dark:text-green-400">Payment released to seller</p>
+                          </div>
+                        )}
                       </>
                     )}
 
