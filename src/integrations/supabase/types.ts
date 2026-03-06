@@ -149,6 +149,9 @@ export type Database = {
           created_at: string
           delivery_address: string
           delivery_rider_id: string | null
+          dispute_reason: string | null
+          dispute_status: string | null
+          disputed_at: string | null
           id: string
           payment_method: string
           phone_number: string
@@ -161,6 +164,9 @@ export type Database = {
           created_at?: string
           delivery_address: string
           delivery_rider_id?: string | null
+          dispute_reason?: string | null
+          dispute_status?: string | null
+          disputed_at?: string | null
           id?: string
           payment_method: string
           phone_number: string
@@ -173,6 +179,9 @@ export type Database = {
           created_at?: string
           delivery_address?: string
           delivery_rider_id?: string | null
+          dispute_reason?: string | null
+          dispute_status?: string | null
+          disputed_at?: string | null
           id?: string
           payment_method?: string
           phone_number?: string
@@ -423,6 +432,10 @@ export type Database = {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
+        Returns: boolean
+      }
+      refund_escrow: {
+        Args: { _admin_id: string; _escrow_id: string }
         Returns: boolean
       }
       release_escrow: {

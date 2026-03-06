@@ -6,7 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Package, Clock, CheckCircle2, XCircle, Truck, MapPin, Phone, Loader2, Shield } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Package, Clock, CheckCircle2, XCircle, Truck, MapPin, Phone, Loader2, Shield, AlertTriangle } from "lucide-react";
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -30,6 +32,8 @@ interface Order {
   payment_method: string;
   delivery_address: string;
   phone_number: string;
+  dispute_status: string | null;
+  dispute_reason: string | null;
   order_items?: OrderItem[];
   escrow_status?: string;
   escrow_id?: string;
@@ -47,10 +51,21 @@ const statusLabels: Record<string, string> = {
   cancelled: 'Cancelled',
 };
 
+const disputeLabels: Record<string, string> = {
+  pending: 'Dispute Pending',
+  under_review: 'Under Review',
+  resolved_refund: 'Refunded',
+  resolved_release: 'Resolved (Released to Seller)',
+  rejected: 'Dispute Rejected',
+};
+
 const Orders = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+  const [disputeDialog, setDisputeDialog] = useState<string | null>(null);
+  const [disputeReason, setDisputeReason] = useState('');
+  const [submittingDispute, setSubmittingDispute] = useState(false);
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -61,7 +76,6 @@ const Orders = () => {
     }
     fetchOrders();
 
-    // Set up realtime subscription for order updates
     const channel = supabase
       .channel('user-orders')
       .on(
@@ -78,7 +92,7 @@ const Orders = () => {
               order.id === payload.new.id ? { ...order, ...payload.new } : order
             )
           );
-          toast.success(`Order ${payload.new.id.slice(0, 8)} status updated to ${statusLabels[payload.new.status] || payload.new.status}`);
+          toast.success(`Order ${(payload.new as any).id.slice(0, 8)} status updated to ${statusLabels[(payload.new as any).status] || (payload.new as any).status}`);
         }
       )
       .subscribe();
@@ -108,7 +122,6 @@ const Orders = () => {
 
       if (error) throw error;
 
-      // Fetch product details and escrow status
       const ordersWithProducts = await Promise.all(
         (data || []).map(async (order) => {
           const productIds = order.order_items?.map((item: OrderItem) => item.product_id).filter(Boolean) || [];
@@ -130,7 +143,6 @@ const Orders = () => {
             };
           }
 
-          // Fetch escrow status for this order
           const { data: escrowData } = await supabase
             .from('escrows')
             .select('id, status')
@@ -146,7 +158,7 @@ const Orders = () => {
         })
       );
 
-      setOrders(ordersWithProducts);
+      setOrders(ordersWithProducts as any);
     } catch (error: any) {
       console.error('Error fetching orders:', error);
       toast.error('Failed to load orders');
@@ -157,7 +169,6 @@ const Orders = () => {
 
   const handleConfirmDelivery = async (orderId: string) => {
     try {
-      // Find all escrows for this order
       const { data: escrowsData, error: escrowError } = await supabase
         .from('escrows')
         .select('id')
@@ -167,14 +178,12 @@ const Orders = () => {
 
       if (escrowError) throw escrowError;
 
-      // Release each escrow via the database function
       for (const escrow of escrowsData || []) {
         const { data: released, error: releaseError } = await supabase
           .rpc('release_escrow', { _escrow_id: escrow.id, _caller_id: user!.id });
         if (releaseError) throw releaseError;
       }
 
-      // Update order status to delivered
       await supabase.from('orders').update({ status: 'delivered' }).eq('id', orderId);
 
       toast.success("Delivery confirmed! Funds released to seller.");
@@ -182,6 +191,38 @@ const Orders = () => {
     } catch (err: any) {
       console.error('Confirm delivery error:', err);
       toast.error("Failed to confirm delivery");
+    }
+  };
+
+  const handleSubmitDispute = async () => {
+    if (!disputeDialog || !disputeReason.trim()) {
+      toast.error("Please provide a reason for the dispute");
+      return;
+    }
+
+    setSubmittingDispute(true);
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({
+          dispute_status: 'pending',
+          dispute_reason: disputeReason.trim(),
+          disputed_at: new Date().toISOString(),
+        })
+        .eq('id', disputeDialog)
+        .eq('user_id', user!.id);
+
+      if (error) throw error;
+
+      toast.success("Dispute submitted. Our team will review it shortly.");
+      setDisputeDialog(null);
+      setDisputeReason('');
+      fetchOrders();
+    } catch (err: any) {
+      console.error('Dispute error:', err);
+      toast.error("Failed to submit dispute");
+    } finally {
+      setSubmittingDispute(false);
     }
   };
 
@@ -216,6 +257,15 @@ const Orders = () => {
   const getCurrentStep = (status: string) => {
     const index = statusSteps.indexOf(status);
     return index === -1 ? 0 : index;
+  };
+
+  const canDispute = (order: Order) => {
+    return (
+      order.escrow_status === 'held' &&
+      order.status !== 'cancelled' &&
+      order.status !== 'delivered' &&
+      !order.dispute_status
+    );
   };
 
   if (loading) {
@@ -268,13 +318,21 @@ const Orders = () => {
                           })}
                         </CardDescription>
                       </div>
-                      <Badge 
-                        variant={getStatusVariant(order.status)}
-                        className="w-fit flex items-center gap-1"
-                      >
-                        {getStatusIcon(order.status)}
-                        <span className="capitalize">{statusLabels[order.status] || order.status}</span>
-                      </Badge>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge 
+                          variant={getStatusVariant(order.status)}
+                          className="w-fit flex items-center gap-1"
+                        >
+                          {getStatusIcon(order.status)}
+                          <span className="capitalize">{statusLabels[order.status] || order.status}</span>
+                        </Badge>
+                        {order.dispute_status && (
+                          <Badge variant="destructive" className="w-fit flex items-center gap-1">
+                            <AlertTriangle className="h-3 w-3" />
+                            {disputeLabels[order.dispute_status] || order.dispute_status}
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                   </CardHeader>
 
@@ -313,7 +371,6 @@ const Orders = () => {
                             );
                           })}
                         </div>
-                        {/* Progress line */}
                         <div className="absolute top-4 left-0 right-0 h-0.5 bg-muted -z-0">
                           <div 
                             className="h-full bg-primary transition-all duration-500"
@@ -389,26 +446,60 @@ const Orders = () => {
                           </div>
                         </div>
 
-                        {/* Escrow Status & Confirm Delivery */}
-                        {order.escrow_status === 'held' && order.status !== 'delivered' && order.status !== 'cancelled' && (
-                          <div className="flex items-center justify-between p-4 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                        {/* Escrow Status & Actions */}
+                        {order.escrow_status === 'held' && order.status !== 'delivered' && order.status !== 'cancelled' && !order.dispute_status && (
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
                             <div className="flex items-center gap-2">
                               <Shield className="h-5 w-5 text-amber-600" />
                               <div>
                                 <p className="font-medium text-sm">Funds held in escrow</p>
-                                <p className="text-xs text-muted-foreground">Confirm delivery to release payment to seller</p>
+                                <p className="text-xs text-muted-foreground">Confirm delivery or raise a dispute</p>
                               </div>
                             </div>
-                            <Button size="sm" onClick={() => handleConfirmDelivery(order.id)}>
-                              <CheckCircle2 className="mr-1 h-4 w-4" />
-                              Confirm Delivery
-                            </Button>
+                            <div className="flex gap-2">
+                              <Button size="sm" variant="outline" onClick={() => { setDisputeDialog(order.id); setDisputeReason(''); }}>
+                                <AlertTriangle className="mr-1 h-4 w-4" />
+                                Dispute
+                              </Button>
+                              <Button size="sm" onClick={() => handleConfirmDelivery(order.id)}>
+                                <CheckCircle2 className="mr-1 h-4 w-4" />
+                                Confirm Delivery
+                              </Button>
+                            </div>
                           </div>
                         )}
-                        {order.escrow_status === 'released' && (
+
+                        {/* Active dispute info */}
+                        {order.dispute_status && (
+                          <div className="p-4 bg-destructive/5 border border-destructive/20 rounded-lg space-y-2">
+                            <div className="flex items-center gap-2">
+                              <AlertTriangle className="h-5 w-5 text-destructive" />
+                              <p className="font-medium text-sm">
+                                {disputeLabels[order.dispute_status] || order.dispute_status}
+                              </p>
+                            </div>
+                            {order.dispute_reason && (
+                              <p className="text-sm text-muted-foreground">
+                                <strong>Reason:</strong> {order.dispute_reason}
+                              </p>
+                            )}
+                            {order.dispute_status === 'resolved_refund' && (
+                              <p className="text-sm text-primary">Funds have been refunded to your wallet.</p>
+                            )}
+                          </div>
+                        )}
+
+                        {order.escrow_status === 'released' && !order.dispute_status && (
                           <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950/20 rounded-lg">
                             <CheckCircle2 className="h-4 w-4 text-green-600" />
                             <p className="text-sm text-green-700 dark:text-green-400">Payment released to seller</p>
+                          </div>
+                        )}
+
+                        {order.escrow_status === 'refunded' && (
+                          <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg">
+                            <Shield className="h-4 w-4 text-blue-600" />
+                            <p className="text-sm text-blue-700 dark:text-blue-400">Funds refunded to your wallet</p>
                           </div>
                         )}
                       </>
@@ -432,6 +523,38 @@ const Orders = () => {
           )}
         </div>
       </main>
+
+      {/* Dispute Dialog */}
+      <Dialog open={!!disputeDialog} onOpenChange={() => setDisputeDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Dispute Order
+            </DialogTitle>
+            <DialogDescription>
+              Explain why you're disputing this order. Your funds will remain in escrow while our team reviews your case.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            placeholder="Describe the issue: wrong item received, item not delivered, damaged product, etc."
+            value={disputeReason}
+            onChange={(e) => setDisputeReason(e.target.value)}
+            rows={4}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDisputeDialog(null)}>Cancel</Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleSubmitDispute}
+              disabled={submittingDispute || !disputeReason.trim()}
+            >
+              {submittingDispute ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Submit Dispute
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Footer />
     </div>
