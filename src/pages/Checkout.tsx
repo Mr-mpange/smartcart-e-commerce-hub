@@ -190,8 +190,8 @@ const Checkout = () => {
 
         if (data?.success) {
           await supabase.from('cart_items').delete().eq('user_id', user?.id);
-          toast.success("Payment initiated! Funds held in escrow until delivery.");
-          navigate(`/payment-success?order_id=${order.id}`);
+          toast.info("A payment request has been sent to your phone. Please enter your M-Pesa PIN to confirm.");
+          navigate(`/payment-success?order_id=${order.id}&method=mobile_money`);
         } else {
           throw new Error('Payment initiation failed');
         }
