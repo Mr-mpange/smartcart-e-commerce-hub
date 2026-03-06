@@ -5,13 +5,14 @@ import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Package, Loader2, Bell } from "lucide-react";
+import { CheckCircle2, Package, Loader2, Bell, Smartphone, ShieldCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 const statusLabels: Record<string, string> = {
   pending: "Awaiting Payment",
   confirmed: "Payment Confirmed",
+  failed: "Payment Failed",
   processing: "Processing",
   shipped: "Shipped",
   delivered: "Delivered",
@@ -21,12 +22,12 @@ const PaymentSuccess = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const orderId = searchParams.get("order_id");
+  const paymentMethod = searchParams.get("method");
   const [orderStatus, setOrderStatus] = useState<string>("pending");
 
   useEffect(() => {
     if (!orderId) return;
 
-    // Fetch initial status
     const fetchStatus = async () => {
       const { data } = await supabase
         .from("orders")
@@ -37,7 +38,6 @@ const PaymentSuccess = () => {
     };
     fetchStatus();
 
-    // Subscribe to realtime updates
     const channel = supabase
       .channel(`payment-${orderId}`)
       .on(
@@ -51,12 +51,13 @@ const PaymentSuccess = () => {
         (payload) => {
           const newStatus = payload.new.status;
           setOrderStatus(newStatus);
-          toast.success(
-            <div className="flex items-center gap-2">
-              <Bell className="h-4 w-4" />
-              <span>Order status: {statusLabels[newStatus] || newStatus}</span>
-            </div>
-          );
+          if (newStatus === "confirmed") {
+            toast.success("Payment confirmed! Your funds are held safely in escrow until delivery.");
+          } else if (newStatus === "failed") {
+            toast.error("Payment failed. Please try again.");
+          } else {
+            toast.info(`Order status: ${statusLabels[newStatus] || newStatus}`);
+          }
         }
       )
       .subscribe();
@@ -66,7 +67,10 @@ const PaymentSuccess = () => {
     };
   }, [orderId]);
 
-  const isConfirmed = orderStatus !== "pending";
+  const isPending = orderStatus === "pending";
+  const isConfirmed = orderStatus === "confirmed" || orderStatus === "processing" || orderStatus === "shipped" || orderStatus === "delivered";
+  const isFailed = orderStatus === "failed";
+  const isMobileMoney = paymentMethod === "mobile_money";
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -77,31 +81,79 @@ const PaymentSuccess = () => {
           <Card className="text-center">
             <CardHeader className="space-y-4 pb-8">
               <div className="mx-auto">
-                <CheckCircle2 className="h-16 w-16 md:h-20 md:w-20 text-primary animate-in zoom-in duration-300" />
+                {isPending ? (
+                  <Smartphone className="h-16 w-16 md:h-20 md:w-20 text-primary animate-pulse" />
+                ) : isFailed ? (
+                  <div className="h-16 w-16 md:h-20 md:w-20 rounded-full bg-destructive/10 flex items-center justify-center mx-auto">
+                    <span className="text-3xl">✕</span>
+                  </div>
+                ) : (
+                  <CheckCircle2 className="h-16 w-16 md:h-20 md:w-20 text-primary animate-in zoom-in duration-300" />
+                )}
               </div>
               <div className="space-y-2">
                 <CardTitle className="text-2xl md:text-3xl">
-                  {isConfirmed ? "Payment Confirmed!" : "Order Placed!"}
+                  {isPending
+                    ? "Confirm Payment on Your Phone"
+                    : isFailed
+                    ? "Payment Failed"
+                    : "Payment Confirmed!"}
                 </CardTitle>
                 <CardDescription className="text-base md:text-lg">
-                  {isConfirmed
-                    ? "Your payment has been confirmed successfully"
-                    : "Waiting for payment confirmation..."}
+                  {isPending && isMobileMoney
+                    ? "A payment push has been sent to your phone. Enter your M-Pesa/TigoPesa/Airtel PIN to authorize."
+                    : isPending
+                    ? "Waiting for payment confirmation..."
+                    : isFailed
+                    ? "The payment was not completed. You can try again from your orders."
+                    : "Your payment is confirmed. Funds are held in escrow until you receive your order."}
                 </CardDescription>
               </div>
             </CardHeader>
 
             <CardContent className="space-y-6">
-              {/* Live Status */}
+              {/* Pending: show step-by-step instructions */}
+              {isPending && isMobileMoney && (
+                <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 md:p-6 text-left space-y-3">
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <Smartphone className="h-5 w-5 text-primary" />
+                    Complete Payment
+                  </h3>
+                  <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
+                    <li>Check your phone for the <strong>USSD payment prompt</strong></li>
+                    <li>Enter your <strong>mobile money PIN</strong> to authorize</li>
+                    <li>This page will update <strong>automatically</strong> once confirmed</li>
+                  </ol>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    💡 Your money is protected — funds are held in escrow and only released to the seller after you confirm delivery.
+                  </p>
+                </div>
+              )}
+
+              {/* Live Status Badge */}
               <div className="bg-muted/50 rounded-lg p-4 md:p-6 flex items-center justify-center gap-3">
-                {!isConfirmed && <Loader2 className="h-5 w-5 animate-spin text-primary" />}
-                <Badge variant={isConfirmed ? "default" : "outline"} className="text-sm px-4 py-1.5">
+                {isPending && <Loader2 className="h-5 w-5 animate-spin text-primary" />}
+                {isConfirmed && <ShieldCheck className="h-5 w-5 text-primary" />}
+                <Badge
+                  variant={isConfirmed ? "default" : isFailed ? "destructive" : "outline"}
+                  className="text-sm px-4 py-1.5"
+                >
                   {statusLabels[orderStatus] || orderStatus}
                 </Badge>
-                {!isConfirmed && (
+                {isPending && (
                   <span className="text-xs text-muted-foreground">Live updates</span>
                 )}
               </div>
+
+              {/* Escrow info after confirmation */}
+              {isConfirmed && (
+                <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 text-sm text-muted-foreground flex items-start gap-3">
+                  <ShieldCheck className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                  <p>
+                    Your payment is safely held in <strong>escrow</strong>. The seller will NOT receive the money until you confirm delivery in your orders page.
+                  </p>
+                </div>
+              )}
 
               {orderId && (
                 <div className="bg-muted/50 rounded-lg p-4 md:p-6">
@@ -111,14 +163,6 @@ const PaymentSuccess = () => {
                   </p>
                 </div>
               )}
-
-              <div className="space-y-3 text-sm md:text-base text-muted-foreground">
-                <p>
-                  {isConfirmed
-                    ? "Your order is being processed. You will receive SMS updates."
-                    : "Check your phone to complete the mobile money payment. This page updates automatically."}
-                </p>
-              </div>
 
               <div className="flex flex-col sm:flex-row gap-3 pt-4">
                 <Button
@@ -137,6 +181,16 @@ const PaymentSuccess = () => {
                   >
                     <Package className="mr-2 h-4 w-4" />
                     Track Order
+                  </Button>
+                )}
+                {isFailed && (
+                  <Button
+                    onClick={() => navigate("/orders")}
+                    variant="destructive"
+                    className="flex-1"
+                    size="lg"
+                  >
+                    View Orders
                   </Button>
                 )}
               </div>
