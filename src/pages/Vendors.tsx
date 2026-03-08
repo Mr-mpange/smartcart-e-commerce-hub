@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Star, MapPin, Package, Search, Verified, Store } from "lucide-react";
 import { VendorRegistration } from "@/components/VendorRegistration";
+import { RiderRegistration } from "@/components/RiderRegistration";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
