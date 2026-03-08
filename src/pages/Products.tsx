@@ -19,6 +19,7 @@ interface Product {
   category: string;
   stock_quantity: number;
   vendor_id: string;
+  created_at: string;
   avg_rating?: number;
   review_count?: number;
   vendor_name?: string;
@@ -27,6 +28,8 @@ interface Product {
 const Products = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sortBy, setSortBy] = useState("featured");
+  const [searchQuery, setSearchQuery] = useState("");
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -36,7 +39,6 @@ const Products = () => {
 
   const fetchProducts = async () => {
     try {
-      // First get approved vendor IDs and names
       const { data: approvedVendors } = await supabase
         .from('vendor_profiles')
         .select('user_id, business_name')
@@ -60,7 +62,6 @@ const Products = () => {
       const { data, error } = await query;
       if (error) throw error;
 
-      // Fetch review stats for all products
       const productIds = (data || []).map(p => p.id);
       let reviewStats = new Map<string, { avg: number; count: number }>();
       if (productIds.length > 0) {
@@ -101,6 +102,22 @@ const Products = () => {
     }
   };
 
+  const sortedProducts = [...products]
+    .filter(p => {
+      if (!searchQuery) return true;
+      const q = searchQuery.toLowerCase();
+      return p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q) || (p.vendor_name || '').toLowerCase().includes(q);
+    })
+    .sort((a, b) => {
+      switch (sortBy) {
+        case 'price-low': return a.price - b.price;
+        case 'price-high': return b.price - a.price;
+        case 'rating': return (b.avg_rating || 0) - (a.avg_rating || 0);
+        case 'newest': return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        default: return 0; // featured = original order
+      }
+    });
+
   const handleAddToCart = async (productId: string) => {
     if (!user) {
       toast.error('Please sign in to add items to cart');
@@ -109,7 +126,6 @@ const Products = () => {
     }
 
     try {
-      // Check if item already exists in cart
       const { data: existingItem } = await supabase
         .from('cart_items')
         .select('id, quantity')
@@ -118,19 +134,15 @@ const Products = () => {
         .maybeSingle();
 
       if (existingItem) {
-        // Update quantity
         const { error } = await supabase
           .from('cart_items')
           .update({ quantity: existingItem.quantity + 1 })
           .eq('id', existingItem.id);
-
         if (error) throw error;
       } else {
-        // Insert new item
         const { error } = await supabase
           .from('cart_items')
           .insert([{ user_id: user.id, product_id: productId, quantity: 1 }]);
-
         if (error) throw error;
       }
 
@@ -155,7 +167,6 @@ const Products = () => {
     <div className="min-h-screen bg-background">
       <Navbar />
       
-      {/* Hero Header with Background */}
       <PageHeader
         title="All Products"
         subtitle="Discover amazing products from trusted vendors across East Africa. Quality guaranteed with buyer protection."
@@ -164,7 +175,6 @@ const Products = () => {
       />
 
       <div className="container mx-auto px-4 py-8">
-        {/* Filters - Floating search bar */}
         <div className="mb-8 -mt-6 relative z-10">
           <div className="bg-background rounded-xl shadow-lg p-4 flex flex-col md:flex-row gap-4">
             <div className="flex-1 relative">
@@ -173,11 +183,13 @@ const Products = () => {
                 type="search"
                 placeholder="Search products..."
                 className="pl-10 h-12"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
             
             <div className="flex gap-2">
-              <Select defaultValue="featured">
+              <Select value={sortBy} onValueChange={setSortBy}>
                 <SelectTrigger className="w-[180px] h-12">
                   <SelectValue placeholder="Sort by" />
                 </SelectTrigger>
@@ -197,14 +209,15 @@ const Products = () => {
           </div>
         </div>
 
-        {/* Products Grid */}
-        {products.length === 0 ? (
+        {sortedProducts.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-muted-foreground">No products available at the moment.</p>
+            <p className="text-muted-foreground">
+              {searchQuery ? 'No products match your search.' : 'No products available at the moment.'}
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {products.map((product) => (
+            {sortedProducts.map((product) => (
               <ProductCard
                 key={product.id}
                 id={product.id}
