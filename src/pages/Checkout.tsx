@@ -107,8 +107,9 @@ const Checkout = () => {
     });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    setPaymentError(null);
     
     if (!formData.name || !formData.email || !formData.phone || !formData.address) {
       toast.error("Please fill in all required fields");
@@ -189,11 +190,12 @@ const Checkout = () => {
 
         if (error) {
           console.error('Payment edge function error:', error);
-          throw new Error('Unable to connect to payment service. Please try again.');
+          setPaymentError('Unable to connect to payment service. Please try again.');
+          setIsLoading(false);
+          return;
         }
 
         if (data?.error) {
-          // Extract specific error from Snippe API
           const details = data.details;
           let userMessage = 'Payment failed. ';
           
@@ -209,17 +211,18 @@ const Checkout = () => {
             userMessage += 'Please check your phone number and try again.';
           }
 
-          toast.error(userMessage, { duration: 8000 });
+          setPaymentError(userMessage);
           setIsLoading(false);
           return;
         }
 
         if (data?.success) {
+          setPaymentError(null);
           await supabase.from('cart_items').delete().eq('user_id', user?.id);
           toast.info("A payment request has been sent to your phone. Please enter your M-Pesa PIN to confirm.", { duration: 10000 });
           navigate(`/payment-success?order_id=${order.id}&method=mobile_money`);
         } else {
-          toast.error('Payment could not be initiated. Please try again or use Cash on Delivery.', { duration: 8000 });
+          setPaymentError('Payment could not be initiated. Please try again or use Cash on Delivery.');
           setIsLoading(false);
           return;
         }
@@ -236,7 +239,7 @@ const Checkout = () => {
       }
     } catch (error: any) {
       console.error('Checkout error:', error);
-      toast.error(error.message || "Something went wrong. Please try again.", { duration: 8000 });
+      setPaymentError(error.message || "Something went wrong. Please try again.");
     } finally {
       setIsLoading(false);
     }
