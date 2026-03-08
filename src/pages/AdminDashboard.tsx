@@ -71,14 +71,16 @@ const AdminDashboard = () => {
 
   const fetchData = async () => {
     try {
-      const [vendorsRes, profilesRes, productsRes, ordersRes] = await Promise.all([
+      const [vendorsRes, ridersRes, profilesRes, productsRes, ordersRes] = await Promise.all([
         supabase.from("vendor_profiles").select("*").order("created_at", { ascending: false }),
+        supabase.from("rider_profiles").select("*").order("created_at", { ascending: false }),
         supabase.from("profiles").select("id", { count: "exact", head: true }),
         supabase.from("products").select("id", { count: "exact", head: true }),
         supabase.from("orders").select("id", { count: "exact", head: true }),
       ]);
 
       const vendorData = vendorsRes.data || [];
+      const riderData = ridersRes.data || [];
       const userIds = vendorData.map((v) => v.user_id);
 
       let profilesMap = new Map<string, { full_name: string; phone: string | null }>();
@@ -91,11 +93,13 @@ const AdminDashboard = () => {
       }
 
       setVendors(vendorData.map((v) => ({ ...v, profile: profilesMap.get(v.user_id) })));
+      setRiders(riderData as RiderProfile[]);
       setStats({
         totalUsers: profilesRes.count || 0,
         totalVendors: vendorData.length,
         totalProducts: productsRes.count || 0,
         totalOrders: ordersRes.count || 0,
+        totalRiders: riderData.length,
       });
     } catch (error) {
       console.error("Error fetching admin data:", error);
