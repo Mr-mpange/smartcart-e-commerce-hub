@@ -1,6 +1,6 @@
 import {
   Shield, Users, Store, Package, ShoppingCart, TrendingUp,
-  ChevronLeft, Wallet,
+  ChevronLeft, Wallet, Truck,
 } from "lucide-react";
 import {
   Sidebar,
@@ -27,6 +27,7 @@ const menuItems = [
   { id: "overview", label: "Overview", icon: TrendingUp },
   { id: "orders", label: "Orders", icon: ShoppingCart },
   { id: "vendors", label: "Vendors", icon: Store },
+  { id: "riders", label: "Riders", icon: Truck },
   { id: "wallets", label: "Wallets & Escrow", icon: Wallet },
   { id: "analytics", label: "Analytics", icon: TrendingUp },
 ];

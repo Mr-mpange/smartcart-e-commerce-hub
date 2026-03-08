@@ -17,7 +17,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import {
   Shield, Users, Store, Package, CheckCircle2, XCircle,
-  Clock, Loader2, ShoppingCart,
+  Clock, Loader2, ShoppingCart, Truck,
 } from "lucide-react";
 
 interface VendorProfile {
