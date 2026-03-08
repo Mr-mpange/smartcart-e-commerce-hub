@@ -288,6 +288,108 @@ const AdminDashboard = () => {
     );
   };
 
+  const pendingRiders = riders.filter((r) => !r.is_approved);
+  const approvedRiders = riders.filter((r) => r.is_approved);
+
+  const renderRiders = () => {
+    const renderRiderTable = (list: RiderProfile[], tab: string) => (
+      <Card>
+        <CardHeader>
+          <CardTitle className="capitalize">{tab} Riders</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {list.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">No riders found.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Phone</TableHead>
+                  <TableHead className="hidden md:table-cell">Vehicle</TableHead>
+                  <TableHead className="hidden md:table-cell">Area</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {list.map((rider) => (
+                  <TableRow key={rider.id}>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium">{rider.full_name}</p>
+                        {rider.license_number && (
+                          <p className="text-xs text-muted-foreground">License: {rider.license_number}</p>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>{rider.phone}</TableCell>
+                    <TableCell className="hidden md:table-cell capitalize">{rider.vehicle_type}</TableCell>
+                    <TableCell className="hidden md:table-cell">{rider.area_of_operation || "—"}</TableCell>
+                    <TableCell>
+                      <Badge variant={rider.is_approved ? "default" : "outline"}>
+                        {rider.is_approved ? "Approved" : "Pending"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {!rider.is_approved ? (
+                        <Button
+                          size="sm"
+                          onClick={() => handleRiderApproval(rider.id, true)}
+                          disabled={actionLoading === rider.id}
+                        >
+                          {actionLoading === rider.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="h-4 w-4 mr-1" />
+                          )}
+                          Approve
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleRiderApproval(rider.id, false)}
+                          disabled={actionLoading === rider.id}
+                        >
+                          {actionLoading === rider.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <XCircle className="h-4 w-4 mr-1" />
+                          )}
+                          Revoke
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    );
+
+    return (
+      <Tabs defaultValue="pending">
+        <TabsList className="mb-4">
+          <TabsTrigger value="pending" className="gap-2">
+            <Clock className="h-4 w-4" /> Pending ({pendingRiders.length})
+          </TabsTrigger>
+          <TabsTrigger value="approved" className="gap-2">
+            <CheckCircle2 className="h-4 w-4" /> Approved ({approvedRiders.length})
+          </TabsTrigger>
+          <TabsTrigger value="all" className="gap-2">
+            <Truck className="h-4 w-4" /> All ({riders.length})
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="pending">{renderRiderTable(pendingRiders, "pending")}</TabsContent>
+        <TabsContent value="approved">{renderRiderTable(approvedRiders, "approved")}</TabsContent>
+        <TabsContent value="all">{renderRiderTable(riders, "all")}</TabsContent>
+      </Tabs>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Navbar />
@@ -303,6 +405,7 @@ const AdminDashboard = () => {
               {activeTab === "overview" && renderOverview()}
               {activeTab === "orders" && <AdminOrderManagement />}
               {activeTab === "vendors" && renderVendors()}
+              {activeTab === "riders" && renderRiders()}
               {activeTab === "wallets" && <AdminWalletManagement />}
               {activeTab === "analytics" && <AdminRevenueAnalytics />}
             </div>
