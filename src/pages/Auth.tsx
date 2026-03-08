@@ -16,14 +16,17 @@ export default function Auth() {
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signIn, signUp, user } = useAuth();
+  const { signIn, signUp, user, userRole, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (user) {
-      navigate('/');
+    if (!authLoading && user && userRole) {
+      if (userRole === 'admin') navigate('/admin/dashboard');
+      else if (userRole === 'vendor') navigate('/vendor/dashboard');
+      else if (userRole === 'delivery_rider') navigate('/rider/dashboard');
+      else navigate('/');
     }
-  }, [user, navigate]);
+  }, [authLoading, user, userRole, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -56,11 +56,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data, error } = await supabase
         .from('user_roles')
         .select('role')
-        .eq('user_id', userId)
-        .maybeSingle();
-      
+        .eq('user_id', userId);
+
       if (error) throw error;
-      setUserRole(data?.role || null);
+
+      const roles = (data ?? []).map((r) => r.role);
+
+      // Priority order for routing/guards when user has multiple roles
+      if (roles.includes('admin')) {
+        setUserRole('admin');
+      } else if (roles.includes('vendor')) {
+        setUserRole('vendor');
+      } else if (roles.includes('delivery_rider')) {
+        setUserRole('delivery_rider');
+      } else if (roles.includes('customer')) {
+        setUserRole('customer');
+      } else {
+        setUserRole(null);
+      }
     } catch (error) {
       console.error('Error fetching user role:', error);
       setUserRole(null);
