@@ -19,6 +19,9 @@ interface Product {
   category: string;
   stock_quantity: number;
   vendor_id: string;
+  avg_rating?: number;
+  review_count?: number;
+  vendor_name?: string;
 }
 
 const Products = () => {
