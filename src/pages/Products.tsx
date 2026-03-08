@@ -224,8 +224,47 @@ const Products = () => {
     return (
       <div className="min-h-screen bg-background">
         <Navbar />
-        <div className="container mx-auto px-4 py-8 flex justify-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+        <PageHeader
+          title="All Products"
+          subtitle="Discover amazing products from trusted vendors across East Africa. Quality guaranteed with buyer protection."
+          backgroundImage="https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=1920&h=600&fit=crop"
+          overlay="dark"
+        />
+        <div className="container mx-auto px-4 py-8">
+          {/* Skeleton search bar */}
+          <div className="mb-8 -mt-6 relative z-10">
+            <div className="bg-background rounded-xl shadow-lg p-4 flex flex-col md:flex-row gap-4">
+              <Skeleton className="h-12 flex-1 rounded-md" />
+              <Skeleton className="h-12 w-[180px] rounded-md" />
+            </div>
+          </div>
+          {/* Skeleton category chips */}
+          <div className="flex flex-wrap gap-2 mb-6">
+            {Array.from({ length: 7 }).map((_, i) => (
+              <Skeleton key={i} className="h-9 w-24 rounded-full" />
+            ))}
+          </div>
+          {/* Skeleton product grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="rounded-xl border bg-card overflow-hidden animate-fade-in" style={{ animationDelay: `${i * 80}ms` }}>
+                <Skeleton className="h-64 w-full rounded-none" />
+                <div className="p-4 space-y-3">
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-5 w-3/4" />
+                  <div className="flex gap-1">
+                    {Array.from({ length: 5 }).map((_, j) => (
+                      <Skeleton key={j} className="h-4 w-4 rounded-full" />
+                    ))}
+                  </div>
+                  <Skeleton className="h-7 w-32" />
+                </div>
+                <div className="px-4 pb-4">
+                  <Skeleton className="h-10 w-full rounded-md" />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );
