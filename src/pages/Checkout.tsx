@@ -384,6 +384,28 @@ const Checkout = () => {
                       </RadioGroup>
                     </div>
 
+                    {paymentError && (
+                      <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-4 space-y-3">
+                        <div className="flex items-start gap-3">
+                          <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+                          <div className="space-y-1">
+                            <p className="font-medium text-destructive">Payment Failed</p>
+                            <p className="text-sm text-muted-foreground">{paymentError}</p>
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="w-full gap-2"
+                          onClick={() => handleSubmit()}
+                          disabled={isLoading}
+                        >
+                          <RotateCcw className="h-4 w-4" />
+                          Retry Payment
+                        </Button>
+                      </div>
+                    )}
+
                     <Button 
                       type="submit" 
                       className="w-full" 
