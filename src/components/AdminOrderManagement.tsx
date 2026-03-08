@@ -476,6 +476,8 @@ export function AdminOrderManagement() {
               )}
               {selectedOrder.dispute_status && (
                 <DisputeChat orderId={selectedOrder.id} canSend={['pending', 'under_review'].includes(selectedOrder.dispute_status || '')} />
+              )}
+
               <div className="space-y-2">
                 <Label>Assign Delivery Rider (User ID)</Label>
                 <div className="flex gap-2">
