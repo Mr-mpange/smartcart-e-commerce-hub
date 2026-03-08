@@ -30,11 +30,24 @@ interface VendorProfile {
   profile?: { full_name: string; phone: string | null };
 }
 
+interface RiderProfile {
+  id: string;
+  user_id: string;
+  full_name: string;
+  phone: string;
+  vehicle_type: string;
+  license_number: string | null;
+  area_of_operation: string | null;
+  is_approved: boolean;
+  created_at: string;
+}
+
 interface Stats {
   totalUsers: number;
   totalVendors: number;
   totalProducts: number;
   totalOrders: number;
+  totalRiders: number;
 }
 
 const AdminDashboard = () => {
