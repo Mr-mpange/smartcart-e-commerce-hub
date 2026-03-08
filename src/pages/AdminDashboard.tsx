@@ -54,7 +54,8 @@ const AdminDashboard = () => {
   const { user, userRole } = useAuth();
   const navigate = useNavigate();
   const [vendors, setVendors] = useState<VendorProfile[]>([]);
-  const [stats, setStats] = useState<Stats>({ totalUsers: 0, totalVendors: 0, totalProducts: 0, totalOrders: 0 });
+  const [riders, setRiders] = useState<RiderProfile[]>([]);
+  const [stats, setStats] = useState<Stats>({ totalUsers: 0, totalVendors: 0, totalProducts: 0, totalOrders: 0, totalRiders: 0 });
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
