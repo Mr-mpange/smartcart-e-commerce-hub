@@ -341,6 +341,45 @@ export type Database = {
           },
         ]
       }
+      rider_profiles: {
+        Row: {
+          area_of_operation: string | null
+          created_at: string
+          full_name: string
+          id: string
+          is_approved: boolean
+          license_number: string | null
+          phone: string
+          updated_at: string
+          user_id: string
+          vehicle_type: string
+        }
+        Insert: {
+          area_of_operation?: string | null
+          created_at?: string
+          full_name: string
+          id?: string
+          is_approved?: boolean
+          license_number?: string | null
+          phone: string
+          updated_at?: string
+          user_id: string
+          vehicle_type?: string
+        }
+        Update: {
+          area_of_operation?: string | null
+          created_at?: string
+          full_name?: string
+          id?: string
+          is_approved?: boolean
+          license_number?: string | null
+          phone?: string
+          updated_at?: string
+          user_id?: string
+          vehicle_type?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
