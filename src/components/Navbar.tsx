@@ -12,6 +12,7 @@ export const Navbar = () => {
   const { user, userRole, signOut } = useAuth();
   const navigate = useNavigate();
   const [cartCount, setCartCount] = useState(0);
+  const [wishlistCount, setWishlistCount] = useState(0);
 
   useEffect(() => {
     if (user) {
