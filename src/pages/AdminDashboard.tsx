@@ -17,7 +17,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import {
   Shield, Users, Store, Package, CheckCircle2, XCircle,
-  Clock, Loader2, ShoppingCart,
+  Clock, Loader2, ShoppingCart, Truck,
 } from "lucide-react";
 
 interface VendorProfile {
@@ -30,18 +30,32 @@ interface VendorProfile {
   profile?: { full_name: string; phone: string | null };
 }
 
+interface RiderProfile {
+  id: string;
+  user_id: string;
+  full_name: string;
+  phone: string;
+  vehicle_type: string;
+  license_number: string | null;
+  area_of_operation: string | null;
+  is_approved: boolean;
+  created_at: string;
+}
+
 interface Stats {
   totalUsers: number;
   totalVendors: number;
   totalProducts: number;
   totalOrders: number;
+  totalRiders: number;
 }
 
 const AdminDashboard = () => {
   const { user, userRole } = useAuth();
   const navigate = useNavigate();
   const [vendors, setVendors] = useState<VendorProfile[]>([]);
-  const [stats, setStats] = useState<Stats>({ totalUsers: 0, totalVendors: 0, totalProducts: 0, totalOrders: 0 });
+  const [riders, setRiders] = useState<RiderProfile[]>([]);
+  const [stats, setStats] = useState<Stats>({ totalUsers: 0, totalVendors: 0, totalProducts: 0, totalOrders: 0, totalRiders: 0 });
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
@@ -57,14 +71,16 @@ const AdminDashboard = () => {
 
   const fetchData = async () => {
     try {
-      const [vendorsRes, profilesRes, productsRes, ordersRes] = await Promise.all([
+      const [vendorsRes, ridersRes, profilesRes, productsRes, ordersRes] = await Promise.all([
         supabase.from("vendor_profiles").select("*").order("created_at", { ascending: false }),
+        supabase.from("rider_profiles").select("*").order("created_at", { ascending: false }),
         supabase.from("profiles").select("id", { count: "exact", head: true }),
         supabase.from("products").select("id", { count: "exact", head: true }),
         supabase.from("orders").select("id", { count: "exact", head: true }),
       ]);
 
       const vendorData = vendorsRes.data || [];
+      const riderData = ridersRes.data || [];
       const userIds = vendorData.map((v) => v.user_id);
 
       let profilesMap = new Map<string, { full_name: string; phone: string | null }>();
@@ -77,11 +93,13 @@ const AdminDashboard = () => {
       }
 
       setVendors(vendorData.map((v) => ({ ...v, profile: profilesMap.get(v.user_id) })));
+      setRiders(riderData as RiderProfile[]);
       setStats({
         totalUsers: profilesRes.count || 0,
         totalVendors: vendorData.length,
         totalProducts: productsRes.count || 0,
         totalOrders: ordersRes.count || 0,
+        totalRiders: riderData.length,
       });
     } catch (error) {
       console.error("Error fetching admin data:", error);
@@ -106,6 +124,26 @@ const AdminDashboard = () => {
       );
     } catch (error: any) {
       toast.error(error.message || "Failed to update vendor");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleRiderApproval = async (riderId: string, approve: boolean) => {
+    setActionLoading(riderId);
+    try {
+      const { error } = await supabase
+        .from("rider_profiles")
+        .update({ is_approved: approve })
+        .eq("id", riderId);
+
+      if (error) throw error;
+      toast.success(approve ? "Rider approved!" : "Rider rejected.");
+      setRiders((prev) =>
+        prev.map((r) => (r.id === riderId ? { ...r, is_approved: approve } : r))
+      );
+    } catch (error: any) {
+      toast.error(error.message || "Failed to update rider");
     } finally {
       setActionLoading(null);
     }
@@ -250,6 +288,108 @@ const AdminDashboard = () => {
     );
   };
 
+  const pendingRiders = riders.filter((r) => !r.is_approved);
+  const approvedRiders = riders.filter((r) => r.is_approved);
+
+  const renderRiders = () => {
+    const renderRiderTable = (list: RiderProfile[], tab: string) => (
+      <Card>
+        <CardHeader>
+          <CardTitle className="capitalize">{tab} Riders</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {list.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">No riders found.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Phone</TableHead>
+                  <TableHead className="hidden md:table-cell">Vehicle</TableHead>
+                  <TableHead className="hidden md:table-cell">Area</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {list.map((rider) => (
+                  <TableRow key={rider.id}>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium">{rider.full_name}</p>
+                        {rider.license_number && (
+                          <p className="text-xs text-muted-foreground">License: {rider.license_number}</p>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>{rider.phone}</TableCell>
+                    <TableCell className="hidden md:table-cell capitalize">{rider.vehicle_type}</TableCell>
+                    <TableCell className="hidden md:table-cell">{rider.area_of_operation || "—"}</TableCell>
+                    <TableCell>
+                      <Badge variant={rider.is_approved ? "default" : "outline"}>
+                        {rider.is_approved ? "Approved" : "Pending"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {!rider.is_approved ? (
+                        <Button
+                          size="sm"
+                          onClick={() => handleRiderApproval(rider.id, true)}
+                          disabled={actionLoading === rider.id}
+                        >
+                          {actionLoading === rider.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="h-4 w-4 mr-1" />
+                          )}
+                          Approve
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleRiderApproval(rider.id, false)}
+                          disabled={actionLoading === rider.id}
+                        >
+                          {actionLoading === rider.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <XCircle className="h-4 w-4 mr-1" />
+                          )}
+                          Revoke
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    );
+
+    return (
+      <Tabs defaultValue="pending">
+        <TabsList className="mb-4">
+          <TabsTrigger value="pending" className="gap-2">
+            <Clock className="h-4 w-4" /> Pending ({pendingRiders.length})
+          </TabsTrigger>
+          <TabsTrigger value="approved" className="gap-2">
+            <CheckCircle2 className="h-4 w-4" /> Approved ({approvedRiders.length})
+          </TabsTrigger>
+          <TabsTrigger value="all" className="gap-2">
+            <Truck className="h-4 w-4" /> All ({riders.length})
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="pending">{renderRiderTable(pendingRiders, "pending")}</TabsContent>
+        <TabsContent value="approved">{renderRiderTable(approvedRiders, "approved")}</TabsContent>
+        <TabsContent value="all">{renderRiderTable(riders, "all")}</TabsContent>
+      </Tabs>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Navbar />
@@ -265,6 +405,7 @@ const AdminDashboard = () => {
               {activeTab === "overview" && renderOverview()}
               {activeTab === "orders" && <AdminOrderManagement />}
               {activeTab === "vendors" && renderVendors()}
+              {activeTab === "riders" && renderRiders()}
               {activeTab === "wallets" && <AdminWalletManagement />}
               {activeTab === "analytics" && <AdminRevenueAnalytics />}
             </div>
