@@ -112,6 +112,20 @@ export const Navbar = () => {
                   variant="ghost" 
                   size="icon" 
                   className="relative"
+                  onClick={() => navigate('/wishlist')}
+                >
+                  <Heart className="h-5 w-5" />
+                  {wishlistCount > 0 && (
+                    <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs bg-destructive">
+                      {wishlistCount}
+                    </Badge>
+                  )}
+                </Button>
+
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="relative"
                   onClick={() => navigate('/cart')}
                 >
                   <ShoppingCart className="h-5 w-5" />
