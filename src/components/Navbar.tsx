@@ -1,4 +1,4 @@
-import { ShoppingCart, User, Search, Menu, LogOut, Package, LayoutDashboard, Shield, Wallet, Truck } from "lucide-react";
+import { ShoppingCart, User, Search, Menu, LogOut, Package, LayoutDashboard, Shield, Wallet, Truck, Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -12,27 +12,21 @@ export const Navbar = () => {
   const { user, userRole, signOut } = useAuth();
   const navigate = useNavigate();
   const [cartCount, setCartCount] = useState(0);
+  const [wishlistCount, setWishlistCount] = useState(0);
 
   useEffect(() => {
     if (user) {
       fetchCartCount();
-      // Subscribe to cart changes for real-time badge updates
+      fetchWishlistCount();
       const channel = supabase
         .channel('cart-count')
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'cart_items',
-            filter: `user_id=eq.${user.id}`,
-          },
-          () => fetchCartCount()
-        )
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'cart_items', filter: `user_id=eq.${user.id}` }, () => fetchCartCount())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'wishlists', filter: `user_id=eq.${user.id}` }, () => fetchWishlistCount())
         .subscribe();
       return () => { supabase.removeChannel(channel); };
     } else {
       setCartCount(0);
+      setWishlistCount(0);
     }
   }, [user]);
 
@@ -46,6 +40,18 @@ export const Navbar = () => {
       setCartCount(count || 0);
     } catch (error) {
       console.error('Error fetching cart count:', error);
+    }
+  };
+
+  const fetchWishlistCount = async () => {
+    try {
+      const { count } = await supabase
+        .from('wishlists')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user?.id);
+      setWishlistCount(count || 0);
+    } catch (error) {
+      console.error('Error fetching wishlist count:', error);
     }
   };
 
@@ -102,6 +108,20 @@ export const Navbar = () => {
             
             {user ? (
               <>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="relative"
+                  onClick={() => navigate('/wishlist')}
+                >
+                  <Heart className="h-5 w-5" />
+                  {wishlistCount > 0 && (
+                    <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs bg-destructive">
+                      {wishlistCount}
+                    </Badge>
+                  )}
+                </Button>
+
                 <Button 
                   variant="ghost" 
                   size="icon" 
