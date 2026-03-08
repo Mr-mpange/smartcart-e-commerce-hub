@@ -215,6 +215,26 @@ const Orders = () => {
 
       if (error) throw error;
 
+      // Also insert the dispute reason as the first chat message
+      await supabase.from('dispute_messages').insert({
+        order_id: disputeDialog,
+        user_id: user!.id,
+        message: disputeReason.trim(),
+        is_admin: false,
+      });
+
+      // Send SMS notification for dispute filed
+      const order = orders.find(o => o.id === disputeDialog);
+      if (order?.phone_number) {
+        const shortId = order.id.slice(0, 8).toUpperCase();
+        await supabase.functions.invoke('briq-sms', {
+          body: {
+            phone_number: order.phone_number,
+            message: `Your dispute for order #${shortId} has been filed. Our team will review it shortly.`,
+          },
+        });
+      }
+
       toast.success("Dispute submitted. Our team will review it shortly.");
       setDisputeDialog(null);
       setDisputeReason('');

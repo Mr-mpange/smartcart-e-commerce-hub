@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { DisputeChat } from "@/components/DisputeChat";
 import {
   Loader2, Package, Truck, CheckCircle2, Clock, XCircle,
   Eye, Search, AlertTriangle, Shield, RotateCcw,
