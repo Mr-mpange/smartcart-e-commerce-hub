@@ -144,6 +144,15 @@ export const Navbar = () => {
                         </DropdownMenuItem>
                       </>
                     )}
+                    {userRole === 'delivery_rider' && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => navigate('/rider/dashboard')}>
+                          <Truck className="mr-2 h-4 w-4" />
+                          Rider Dashboard
+                        </DropdownMenuItem>
+                      </>
+                    )}
                     {userRole === 'admin' && (
                       <>
                         <DropdownMenuSeparator />
