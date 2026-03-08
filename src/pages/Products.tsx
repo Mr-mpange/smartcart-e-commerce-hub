@@ -211,9 +211,9 @@ const Products = () => {
                 name={product.name}
                 price={product.price}
                 image={product.image_url || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500'}
-                rating={4.5}
-                reviews={0}
-                vendor="Vendor"
+                rating={product.avg_rating || 0}
+                reviews={product.review_count || 0}
+                vendor={product.vendor_name || 'Vendor'}
                 inStock={product.stock_quantity > 0}
                 onAddToCart={handleAddToCart}
               />
