@@ -12,7 +12,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
-import { Loader2, ShoppingBag, CreditCard, Smartphone, MapPin } from "lucide-react";
+import { Loader2, ShoppingBag, CreditCard, Smartphone, MapPin, AlertCircle, RotateCcw } from "lucide-react";
 
 interface CartItem {
   id: string;
@@ -30,6 +30,7 @@ const Checkout = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [loadingCart, setLoadingCart] = useState(true);
   
@@ -106,8 +107,9 @@ const Checkout = () => {
     });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    setPaymentError(null);
     
     if (!formData.name || !formData.email || !formData.phone || !formData.address) {
       toast.error("Please fill in all required fields");
@@ -188,11 +190,12 @@ const Checkout = () => {
 
         if (error) {
           console.error('Payment edge function error:', error);
-          throw new Error('Unable to connect to payment service. Please try again.');
+          setPaymentError('Unable to connect to payment service. Please try again.');
+          setIsLoading(false);
+          return;
         }
 
         if (data?.error) {
-          // Extract specific error from Snippe API
           const details = data.details;
           let userMessage = 'Payment failed. ';
           
@@ -208,17 +211,18 @@ const Checkout = () => {
             userMessage += 'Please check your phone number and try again.';
           }
 
-          toast.error(userMessage, { duration: 8000 });
+          setPaymentError(userMessage);
           setIsLoading(false);
           return;
         }
 
         if (data?.success) {
+          setPaymentError(null);
           await supabase.from('cart_items').delete().eq('user_id', user?.id);
           toast.info("A payment request has been sent to your phone. Please enter your M-Pesa PIN to confirm.", { duration: 10000 });
           navigate(`/payment-success?order_id=${order.id}&method=mobile_money`);
         } else {
-          toast.error('Payment could not be initiated. Please try again or use Cash on Delivery.', { duration: 8000 });
+          setPaymentError('Payment could not be initiated. Please try again or use Cash on Delivery.');
           setIsLoading(false);
           return;
         }
@@ -235,7 +239,7 @@ const Checkout = () => {
       }
     } catch (error: any) {
       console.error('Checkout error:', error);
-      toast.error(error.message || "Something went wrong. Please try again.", { duration: 8000 });
+      setPaymentError(error.message || "Something went wrong. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -379,6 +383,28 @@ const Checkout = () => {
                         </div>
                       </RadioGroup>
                     </div>
+
+                    {paymentError && (
+                      <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-4 space-y-3">
+                        <div className="flex items-start gap-3">
+                          <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+                          <div className="space-y-1">
+                            <p className="font-medium text-destructive">Payment Failed</p>
+                            <p className="text-sm text-muted-foreground">{paymentError}</p>
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="w-full gap-2"
+                          onClick={() => handleSubmit()}
+                          disabled={isLoading}
+                        >
+                          <RotateCcw className="h-4 w-4" />
+                          Retry Payment
+                        </Button>
+                      </div>
+                    )}
 
                     <Button 
                       type="submit" 
