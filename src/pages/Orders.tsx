@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Package, Clock, CheckCircle2, XCircle, Truck, MapPin, Phone, Loader2, Shield, AlertTriangle } from "lucide-react";
+import { Package, Clock, CheckCircle2, XCircle, Truck, MapPin, Phone, Loader2, Shield, AlertTriangle, MessageSquare } from "lucide-react";
+import { DisputeChat } from "@/components/DisputeChat";
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -213,6 +214,26 @@ const Orders = () => {
         .eq('user_id', user!.id);
 
       if (error) throw error;
+
+      // Also insert the dispute reason as the first chat message
+      await supabase.from('dispute_messages').insert({
+        order_id: disputeDialog,
+        user_id: user!.id,
+        message: disputeReason.trim(),
+        is_admin: false,
+      });
+
+      // Send SMS notification for dispute filed
+      const order = orders.find(o => o.id === disputeDialog);
+      if (order?.phone_number) {
+        const shortId = order.id.slice(0, 8).toUpperCase();
+        await supabase.functions.invoke('briq-sms', {
+          body: {
+            phone_number: order.phone_number,
+            message: `Your dispute for order #${shortId} has been filed. Our team will review it shortly.`,
+          },
+        });
+      }
 
       toast.success("Dispute submitted. Our team will review it shortly.");
       setDisputeDialog(null);
@@ -471,21 +492,27 @@ const Orders = () => {
 
                         {/* Active dispute info */}
                         {order.dispute_status && (
-                          <div className="p-4 bg-destructive/5 border border-destructive/20 rounded-lg space-y-2">
-                            <div className="flex items-center gap-2">
-                              <AlertTriangle className="h-5 w-5 text-destructive" />
-                              <p className="font-medium text-sm">
-                                {disputeLabels[order.dispute_status] || order.dispute_status}
-                              </p>
+                          <div className="space-y-3">
+                            <div className="p-4 bg-destructive/5 border border-destructive/20 rounded-lg space-y-2">
+                              <div className="flex items-center gap-2">
+                                <AlertTriangle className="h-5 w-5 text-destructive" />
+                                <p className="font-medium text-sm">
+                                  {disputeLabels[order.dispute_status] || order.dispute_status}
+                                </p>
+                              </div>
+                              {order.dispute_reason && (
+                                <p className="text-sm text-muted-foreground">
+                                  <strong>Reason:</strong> {order.dispute_reason}
+                                </p>
+                              )}
+                              {order.dispute_status === 'resolved_refund' && (
+                                <p className="text-sm text-primary">Funds have been refunded to your wallet.</p>
+                              )}
                             </div>
-                            {order.dispute_reason && (
-                              <p className="text-sm text-muted-foreground">
-                                <strong>Reason:</strong> {order.dispute_reason}
-                              </p>
-                            )}
-                            {order.dispute_status === 'resolved_refund' && (
-                              <p className="text-sm text-primary">Funds have been refunded to your wallet.</p>
-                            )}
+                            <DisputeChat
+                              orderId={order.id}
+                              canSend={['pending', 'under_review'].includes(order.dispute_status || '')}
+                            />
                           </div>
                         )}
 

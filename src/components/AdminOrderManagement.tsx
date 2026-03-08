@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { DisputeChat } from "@/components/DisputeChat";
 import {
   Loader2, Package, Truck, CheckCircle2, Clock, XCircle,
   Eye, Search, AlertTriangle, Shield, RotateCcw,
@@ -140,8 +141,10 @@ export function AdminOrderManagement() {
   const handleResolveDispute = async (orderId: string, action: 'refund' | 'release') => {
     setResolvingId(orderId);
     try {
+      const order = orders.find(o => o.id === orderId);
+      const shortId = orderId.slice(0, 8).toUpperCase();
+
       if (action === 'refund') {
-        // Get escrows for this order
         const { data: escrows, error: escrowError } = await supabase
           .from('escrows')
           .select('id')
@@ -161,9 +164,18 @@ export function AdminOrderManagement() {
           status: 'cancelled',
         }).eq('id', orderId);
 
+        // SMS to buyer
+        if (order?.phone_number) {
+          await supabase.functions.invoke('briq-sms', {
+            body: {
+              phone_number: order.phone_number,
+              message: `Your dispute for order #${shortId} has been resolved. A full refund has been issued to your wallet.`,
+            },
+          });
+        }
+
         toast.success("Dispute resolved: funds refunded to buyer");
       } else {
-        // Release to vendor
         const { data: escrows, error: escrowError } = await supabase
           .from('escrows')
           .select('id')
@@ -182,6 +194,16 @@ export function AdminOrderManagement() {
           dispute_status: 'resolved_release',
           status: 'delivered',
         }).eq('id', orderId);
+
+        // SMS to buyer
+        if (order?.phone_number) {
+          await supabase.functions.invoke('briq-sms', {
+            body: {
+              phone_number: order.phone_number,
+              message: `Your dispute for order #${shortId} has been reviewed. Funds have been released to the seller.`,
+            },
+          });
+        }
 
         toast.success("Dispute resolved: funds released to seller");
       }
@@ -450,6 +472,9 @@ export function AdminOrderManagement() {
                     </p>
                   )}
                 </div>
+              )}
+              {selectedOrder.dispute_status && (
+                <DisputeChat orderId={selectedOrder.id} canSend={['pending', 'under_review'].includes(selectedOrder.dispute_status || '')} />
               )}
 
               <div className="space-y-2">
