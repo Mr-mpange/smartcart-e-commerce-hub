@@ -6,7 +6,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Package, Clock, CheckCircle2, XCircle, Truck, MapPin, Phone, Loader2, ArrowLeft, Bell } from "lucide-react";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  Package, Clock, CheckCircle2, XCircle, Truck, MapPin, Phone,
+  Loader2, ArrowLeft, Bell, User, Bike, Car, Navigation,
+} from "lucide-react";
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -22,6 +26,12 @@ interface OrderItem {
   };
 }
 
+interface RiderInfo {
+  full_name: string;
+  phone: string;
+  vehicle_type: string;
+}
+
 interface Order {
   id: string;
   created_at: string;
@@ -32,7 +42,9 @@ interface Order {
   delivery_address: string;
   phone_number: string;
   user_id: string;
+  delivery_rider_id: string | null;
   order_items?: OrderItem[];
+  rider?: RiderInfo | null;
 }
 
 const statusSteps = ['pending', 'confirmed', 'processing', 'shipped', 'out_for_delivery', 'delivered'];
@@ -51,11 +63,32 @@ const statusDescriptions: Record<string, string> = {
   pending: 'Your order has been received and is awaiting confirmation.',
   confirmed: 'Your order has been confirmed and is being prepared.',
   processing: 'Your order is being packed and prepared for shipping.',
-  shipped: 'Your order has been shipped and is on its way.',
-  out_for_delivery: 'Your order is out for delivery and will arrive soon.',
+  shipped: 'Your order has been picked up by the delivery rider.',
+  out_for_delivery: 'Your rider is on the way! Your order will arrive soon.',
   delivered: 'Your order has been delivered successfully!',
   cancelled: 'This order has been cancelled.',
 };
+
+const vehicleIcons: Record<string, typeof Bike> = {
+  motorcycle: Bike,
+  bicycle: Bike,
+  car: Car,
+  van: Truck,
+};
+
+function getEstimatedTime(status: string, updatedAt: string): string | null {
+  if (['delivered', 'cancelled', 'pending', 'confirmed', 'processing'].includes(status)) return null;
+  const updated = new Date(updatedAt);
+  if (status === 'shipped') {
+    const est = new Date(updated.getTime() + 60 * 60 * 1000); // +1hr
+    return `Est. delivery by ${est.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  }
+  if (status === 'out_for_delivery') {
+    const est = new Date(updated.getTime() + 30 * 60 * 1000); // +30min
+    return `Arriving by ${est.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  }
+  return null;
+}
 
 const OrderTracking = () => {
   const { id } = useParams<{ id: string }>();
@@ -68,8 +101,7 @@ const OrderTracking = () => {
   useEffect(() => {
     if (id) {
       fetchOrder();
-      
-      // Set up realtime subscription for this specific order
+
       const channel = supabase
         .channel(`order-${id}`)
         .on(
@@ -81,11 +113,16 @@ const OrderTracking = () => {
             filter: `id=eq.${id}`,
           },
           (payload) => {
-            setOrder((prev) => prev ? { ...prev, ...payload.new } : null);
+            const newData = payload.new as any;
+            setOrder((prev) => prev ? { ...prev, ...newData } : null);
+            // Re-fetch rider if rider was just assigned
+            if (newData.delivery_rider_id && (!order?.delivery_rider_id || newData.delivery_rider_id !== order?.delivery_rider_id)) {
+              fetchRiderInfo(newData.delivery_rider_id);
+            }
             toast.success(
               <div className="flex items-center gap-2">
                 <Bell className="h-4 w-4" />
-                <span>Status updated: {statusLabels[payload.new.status] || payload.new.status}</span>
+                <span>Status updated: {statusLabels[newData.status] || newData.status}</span>
               </div>
             );
           }
@@ -98,11 +135,21 @@ const OrderTracking = () => {
     }
   }, [id]);
 
+  const fetchRiderInfo = async (riderId: string) => {
+    const { data } = await supabase
+      .from('rider_profiles')
+      .select('full_name, phone, vehicle_type')
+      .eq('user_id', riderId)
+      .single();
+    if (data) {
+      setOrder((prev) => prev ? { ...prev, rider: data } : null);
+    }
+  };
+
   const fetchOrder = async () => {
     if (!id) return;
 
     try {
-      // Fetch the order
       const { data: orderData, error: orderError } = await supabase
         .from('orders')
         .select('*')
@@ -111,7 +158,6 @@ const OrderTracking = () => {
 
       if (orderError) throw orderError;
 
-      // Check if user owns this order (if logged in)
       if (user && orderData.user_id !== user.id) {
         setError('You do not have permission to view this order.');
         setLoading(false);
@@ -126,7 +172,6 @@ const OrderTracking = () => {
 
       if (itemsError) throw itemsError;
 
-      // Fetch products for order items
       const productIds = orderItems?.map(item => item.product_id).filter(Boolean) || [];
       let productsMap = new Map();
 
@@ -135,19 +180,28 @@ const OrderTracking = () => {
           .from('products')
           .select('id, name, image_url')
           .in('id', productIds as string[]);
-        
         productsMap = new Map(products?.map(p => [p.id, p]) || []);
       }
 
-      const orderWithItems: Order = {
+      // Fetch rider info
+      let riderInfo: RiderInfo | null = null;
+      if (orderData.delivery_rider_id) {
+        const { data: rider } = await supabase
+          .from('rider_profiles')
+          .select('full_name, phone, vehicle_type')
+          .eq('user_id', orderData.delivery_rider_id)
+          .single();
+        riderInfo = rider;
+      }
+
+      setOrder({
         ...orderData,
         order_items: orderItems?.map(item => ({
           ...item,
           product: productsMap.get(item.product_id || '') || null,
         })),
-      };
-
-      setOrder(orderWithItems);
+        rider: riderInfo,
+      });
     } catch (err: any) {
       console.error('Error fetching order:', err);
       setError('Order not found or you do not have permission to view it.');
@@ -163,29 +217,21 @@ const OrderTracking = () => {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case "delivered":
-        return <CheckCircle2 className="h-5 w-5" />;
+      case "delivered": return <CheckCircle2 className="h-5 w-5" />;
       case "shipped":
-      case "out_for_delivery":
-        return <Truck className="h-5 w-5" />;
-      case "cancelled":
-        return <XCircle className="h-5 w-5" />;
-      default:
-        return <Clock className="h-5 w-5" />;
+      case "out_for_delivery": return <Truck className="h-5 w-5" />;
+      case "cancelled": return <XCircle className="h-5 w-5" />;
+      default: return <Clock className="h-5 w-5" />;
     }
   };
 
   const getStatusVariant = (status: string): "default" | "secondary" | "destructive" | "outline" => {
     switch (status) {
-      case "delivered":
-        return "default";
+      case "delivered": return "default";
       case "shipped":
-      case "out_for_delivery":
-        return "secondary";
-      case "cancelled":
-        return "destructive";
-      default:
-        return "outline";
+      case "out_for_delivery": return "secondary";
+      case "cancelled": return "destructive";
+      default: return "outline";
     }
   };
 
@@ -219,15 +265,17 @@ const OrderTracking = () => {
   }
 
   const currentStep = getCurrentStep(order.status);
+  const estimatedTime = getEstimatedTime(order.status, order.updated_at);
+  const VehicleIcon = vehicleIcons[order.rider?.vehicle_type || ''] || Truck;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Navbar />
-      
+
       <main className="flex-1 container mx-auto px-4 py-8 md:py-12">
         <div className="max-w-3xl mx-auto">
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             className="mb-6"
             onClick={() => navigate('/orders')}
           >
@@ -245,15 +293,12 @@ const OrderTracking = () => {
                   </CardTitle>
                   <CardDescription className="mt-1">
                     Placed on {new Date(order.created_at).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
+                      year: 'numeric', month: 'long', day: 'numeric',
+                      hour: '2-digit', minute: '2-digit',
                     })}
                   </CardDescription>
                 </div>
-                <Badge 
+                <Badge
                   variant={getStatusVariant(order.status)}
                   className="w-fit flex items-center gap-1.5 text-sm px-3 py-1.5"
                 >
@@ -264,15 +309,68 @@ const OrderTracking = () => {
             </CardHeader>
 
             <CardContent className="space-y-8">
-              {/* Status Description */}
-              <div className="bg-muted/50 rounded-lg p-4 text-center">
+              {/* Status Description + ETA */}
+              <div className="bg-muted/50 rounded-lg p-4 text-center space-y-2">
                 <p className="text-lg">{statusDescriptions[order.status]}</p>
-                {order.status !== 'cancelled' && order.status !== 'delivered' && (
-                  <p className="text-sm text-muted-foreground mt-2">
+                {estimatedTime && (
+                  <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-4 py-2 rounded-full text-sm font-medium">
+                    <Clock className="h-4 w-4" />
+                    {estimatedTime}
+                  </div>
+                )}
+                {order.status !== 'cancelled' && order.status !== 'delivered' && !estimatedTime && (
+                  <p className="text-sm text-muted-foreground">
                     You'll receive SMS updates when your order status changes.
                   </p>
                 )}
               </div>
+
+              {/* Rider Info Card */}
+              {order.rider && ['shipped', 'out_for_delivery'].includes(order.status) && (
+                <Card className="border-primary/20 bg-primary/5">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-12 w-12 border-2 border-primary/30">
+                          <AvatarFallback className="bg-primary text-primary-foreground text-lg">
+                            {order.rider.full_name.charAt(0)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-semibold text-base">{order.rider.full_name}</p>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <VehicleIcon className="h-3.5 w-3.5" />
+                            <span className="capitalize">{order.rider.vehicle_type}</span>
+                            <span>•</span>
+                            <span>Your Delivery Rider</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          asChild
+                        >
+                          <a href={`tel:${order.rider.phone}`}>
+                            <Phone className="h-4 w-4 mr-1" />
+                            Call
+                          </a>
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {!order.rider && order.delivery_rider_id && ['shipped', 'out_for_delivery'].includes(order.status) && (
+                <Card className="border-dashed">
+                  <CardContent className="p-4 flex items-center gap-3">
+                    <Truck className="h-5 w-5 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">A rider has been assigned to your order.</p>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Progress Tracker */}
               {order.status !== 'cancelled' && (
@@ -281,25 +379,24 @@ const OrderTracking = () => {
                     {statusSteps.map((step, index) => {
                       const isCompleted = index <= currentStep;
                       const isCurrent = index === currentStep;
-                      
+
                       return (
-                        <div 
-                          key={step} 
+                        <div
+                          key={step}
                           className="flex flex-col items-center flex-1 relative"
                         >
-                          {/* Connecting line */}
                           {index > 0 && (
-                            <div 
+                            <div
                               className={`absolute top-5 right-1/2 w-full h-1 -z-10 ${
                                 index <= currentStep ? 'bg-primary' : 'bg-muted'
                               }`}
                             />
                           )}
-                          
-                          <div 
+
+                          <div
                             className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
-                              isCompleted 
-                                ? 'bg-primary text-primary-foreground shadow-lg' 
+                              isCompleted
+                                ? 'bg-primary text-primary-foreground shadow-lg'
                                 : 'bg-muted text-muted-foreground'
                             } ${isCurrent ? 'ring-4 ring-primary/30 scale-110' : ''}`}
                           >
@@ -318,8 +415,7 @@ const OrderTracking = () => {
                       );
                     })}
                   </div>
-                  
-                  {/* Mobile step label */}
+
                   <p className="text-center mt-4 font-medium sm:hidden">
                     {statusLabels[order.status]}
                   </p>
