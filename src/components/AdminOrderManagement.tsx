@@ -141,8 +141,10 @@ export function AdminOrderManagement() {
   const handleResolveDispute = async (orderId: string, action: 'refund' | 'release') => {
     setResolvingId(orderId);
     try {
+      const order = orders.find(o => o.id === orderId);
+      const shortId = orderId.slice(0, 8).toUpperCase();
+
       if (action === 'refund') {
-        // Get escrows for this order
         const { data: escrows, error: escrowError } = await supabase
           .from('escrows')
           .select('id')
@@ -162,9 +164,18 @@ export function AdminOrderManagement() {
           status: 'cancelled',
         }).eq('id', orderId);
 
+        // SMS to buyer
+        if (order?.phone_number) {
+          await supabase.functions.invoke('briq-sms', {
+            body: {
+              phone_number: order.phone_number,
+              message: `Your dispute for order #${shortId} has been resolved. A full refund has been issued to your wallet.`,
+            },
+          });
+        }
+
         toast.success("Dispute resolved: funds refunded to buyer");
       } else {
-        // Release to vendor
         const { data: escrows, error: escrowError } = await supabase
           .from('escrows')
           .select('id')
@@ -183,6 +194,16 @@ export function AdminOrderManagement() {
           dispute_status: 'resolved_release',
           status: 'delivered',
         }).eq('id', orderId);
+
+        // SMS to buyer
+        if (order?.phone_number) {
+          await supabase.functions.invoke('briq-sms', {
+            body: {
+              phone_number: order.phone_number,
+              message: `Your dispute for order #${shortId} has been reviewed. Funds have been released to the seller.`,
+            },
+          });
+        }
 
         toast.success("Dispute resolved: funds released to seller");
       }
