@@ -2,7 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ShoppingCart, Star } from "lucide-react";
+import { ShoppingCart, Star, Heart } from "lucide-react";
 
 interface ProductCardProps {
   id?: string;
@@ -14,7 +14,9 @@ interface ProductCardProps {
   reviews: number;
   vendor: string;
   inStock: boolean;
+  isWishlisted?: boolean;
   onAddToCart?: (productId: string) => void;
+  onToggleWishlist?: (productId: string) => void;
 }
 
 export const ProductCard = ({
@@ -27,7 +29,9 @@ export const ProductCard = ({
   reviews,
   vendor,
   inStock,
-  onAddToCart
+  isWishlisted,
+  onAddToCart,
+  onToggleWishlist,
 }: ProductCardProps) => {
   const navigate = useNavigate();
   const discount = originalPrice ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0;
@@ -47,6 +51,13 @@ export const ProductCard = ({
     }
   };
 
+  const handleWishlistClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (id && onToggleWishlist) {
+      onToggleWishlist(id);
+    }
+  };
+
   return (
     <Card 
       className="group overflow-hidden hover:shadow-lg transition-all duration-300 cursor-pointer"
@@ -62,6 +73,20 @@ export const ProductCard = ({
           <Badge className="absolute top-3 right-3 bg-destructive">
             -{discount}%
           </Badge>
+        )}
+        {onToggleWishlist && (
+          <button
+            onClick={handleWishlistClick}
+            className="absolute top-3 left-3 p-2 rounded-full bg-background/80 backdrop-blur-sm hover:bg-background transition-colors"
+          >
+            <Heart
+              className={`h-5 w-5 transition-colors ${
+                isWishlisted
+                  ? 'fill-destructive text-destructive'
+                  : 'text-muted-foreground hover:text-destructive'
+              }`}
+            />
+          </button>
         )}
         {!inStock && (
           <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
