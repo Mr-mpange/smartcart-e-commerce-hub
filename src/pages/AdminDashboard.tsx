@@ -129,6 +129,26 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleRiderApproval = async (riderId: string, approve: boolean) => {
+    setActionLoading(riderId);
+    try {
+      const { error } = await supabase
+        .from("rider_profiles")
+        .update({ is_approved: approve })
+        .eq("id", riderId);
+
+      if (error) throw error;
+      toast.success(approve ? "Rider approved!" : "Rider rejected.");
+      setRiders((prev) =>
+        prev.map((r) => (r.id === riderId ? { ...r, is_approved: approve } : r))
+      );
+    } catch (error: any) {
+      toast.error(error.message || "Failed to update rider");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex flex-col">
