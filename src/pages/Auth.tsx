@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,7 +34,28 @@ export default function Auth() {
         const { error } = await signIn(email, password);
         if (error) throw error;
         toast.success('Welcome back!');
-        navigate('/');
+        
+        // Fetch user role to redirect to appropriate dashboard
+        const { data: { user: signedInUser } } = await supabase.auth.getUser();
+        if (signedInUser) {
+          const { data: roles } = await supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', signedInUser.id);
+          
+          const roleList = roles?.map(r => r.role) || [];
+          if (roleList.includes('admin')) {
+            navigate('/admin/dashboard');
+          } else if (roleList.includes('vendor')) {
+            navigate('/vendor/dashboard');
+          } else if (roleList.includes('delivery_rider')) {
+            navigate('/rider/dashboard');
+          } else {
+            navigate('/');
+          }
+        } else {
+          navigate('/');
+        }
       } else {
         if (!fullName.trim()) {
           toast.error('Please enter your full name');
