@@ -128,7 +128,12 @@ const Vendors = () => {
         backgroundImage="https://images.unsplash.com/photo-1556740758-90de374c12ad?w=1920&h=600&fit=crop"
         overlay="gradient"
       >
-        {userRole !== 'vendor' && <VendorRegistration />}
+        {userRole !== 'vendor' && userRole !== 'delivery_rider' && (
+          <div className="flex gap-3 flex-wrap">
+            <VendorRegistration />
+            <RiderRegistration />
+          </div>
+        )}
         {userRole === 'vendor' && (
           <Button variant="secondary" onClick={() => navigate('/vendor/dashboard')}>
             <Store className="mr-2 h-4 w-4" />
