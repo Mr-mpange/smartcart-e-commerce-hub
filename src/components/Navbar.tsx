@@ -17,23 +17,16 @@ export const Navbar = () => {
   useEffect(() => {
     if (user) {
       fetchCartCount();
-      // Subscribe to cart changes for real-time badge updates
+      fetchWishlistCount();
       const channel = supabase
         .channel('cart-count')
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'cart_items',
-            filter: `user_id=eq.${user.id}`,
-          },
-          () => fetchCartCount()
-        )
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'cart_items', filter: `user_id=eq.${user.id}` }, () => fetchCartCount())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'wishlists', filter: `user_id=eq.${user.id}` }, () => fetchWishlistCount())
         .subscribe();
       return () => { supabase.removeChannel(channel); };
     } else {
       setCartCount(0);
+      setWishlistCount(0);
     }
   }, [user]);
 
