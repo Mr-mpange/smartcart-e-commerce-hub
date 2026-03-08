@@ -43,6 +43,18 @@ export const Navbar = () => {
     }
   };
 
+  const fetchWishlistCount = async () => {
+    try {
+      const { count } = await supabase
+        .from('wishlists')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user?.id);
+      setWishlistCount(count || 0);
+    } catch (error) {
+      console.error('Error fetching wishlist count:', error);
+    }
+  };
+
   const handleSignOut = async () => {
     await signOut();
     navigate('/');
