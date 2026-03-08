@@ -25,6 +25,7 @@ import ProductDetail from "./pages/ProductDetail";
 import OrderTracking from "./pages/OrderTracking";
 import AdminDashboard from "./pages/AdminDashboard";
 import Wallet from "./pages/Wallet";
+import RiderDashboard from "./pages/RiderDashboard";
 
 const queryClient = new QueryClient();
 
