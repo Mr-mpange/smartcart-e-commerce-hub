@@ -472,7 +472,6 @@ export function AdminOrderManagement() {
                     </p>
                   )}
                 </div>
-                </div>
               )}
               {selectedOrder.dispute_status && (
                 <DisputeChat orderId={selectedOrder.id} canSend={['pending', 'under_review'].includes(selectedOrder.dispute_status || '')} />
