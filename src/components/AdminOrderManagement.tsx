@@ -133,6 +133,26 @@ export function AdminOrderManagement() {
           o.id === orderId ? { ...o, delivery_rider_id: riderId || null } : o
         )
       );
+
+      // Send SMS to the assigned rider
+      if (riderId) {
+        const { data: riderProfile } = await supabase
+          .from("rider_profiles")
+          .select("phone, full_name")
+          .eq("user_id", riderId)
+          .maybeSingle();
+
+        if (riderProfile?.phone) {
+          const order = orders.find(o => o.id === orderId);
+          const shortId = orderId.slice(0, 8).toUpperCase();
+          await supabase.functions.invoke('briq-sms', {
+            body: {
+              phone_number: riderProfile.phone,
+              message: `Hi ${riderProfile.full_name}, you have been assigned a new delivery! Order #${shortId}, deliver to: ${order?.delivery_address || 'See app'}. Open your rider dashboard for details.`,
+            },
+          });
+        }
+      }
     } catch (error: any) {
       toast.error("Failed to assign rider");
     }

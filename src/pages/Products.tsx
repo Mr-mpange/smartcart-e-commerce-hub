@@ -19,6 +19,9 @@ interface Product {
   category: string;
   stock_quantity: number;
   vendor_id: string;
+  avg_rating?: number;
+  review_count?: number;
+  vendor_name?: string;
 }
 
 const Products = () => {
@@ -33,13 +36,14 @@ const Products = () => {
 
   const fetchProducts = async () => {
     try {
-      // First get approved vendor IDs
+      // First get approved vendor IDs and names
       const { data: approvedVendors } = await supabase
         .from('vendor_profiles')
-        .select('user_id')
+        .select('user_id, business_name')
         .eq('is_approved', true);
 
       const approvedIds = approvedVendors?.map(v => v.user_id) || [];
+      const vendorMap = new Map(approvedVendors?.map(v => [v.user_id, v.business_name]) || []);
 
       let query = supabase
         .from('products')
@@ -47,18 +51,48 @@ const Products = () => {
         .eq('is_active', true)
         .order('created_at', { ascending: false });
 
-      // Only show products from approved vendors (if we have approved vendors)
       if (approvedIds.length > 0) {
         query = query.in('vendor_id', approvedIds);
       } else {
-        // No approved vendors = no products to show from DB vendors
         query = query.in('vendor_id', ['none']);
       }
 
       const { data, error } = await query;
-
       if (error) throw error;
-      setProducts(data || []);
+
+      // Fetch review stats for all products
+      const productIds = (data || []).map(p => p.id);
+      let reviewStats = new Map<string, { avg: number; count: number }>();
+      if (productIds.length > 0) {
+        const { data: reviews } = await supabase
+          .from('reviews')
+          .select('product_id, rating')
+          .in('product_id', productIds);
+
+        if (reviews) {
+          const grouped = new Map<string, number[]>();
+          reviews.forEach(r => {
+            const arr = grouped.get(r.product_id) || [];
+            arr.push(r.rating);
+            grouped.set(r.product_id, arr);
+          });
+          grouped.forEach((ratings, pid) => {
+            reviewStats.set(pid, {
+              avg: Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10,
+              count: ratings.length,
+            });
+          });
+        }
+      }
+
+      setProducts(
+        (data || []).map((p) => ({
+          ...p,
+          avg_rating: reviewStats.get(p.id)?.avg || 0,
+          review_count: reviewStats.get(p.id)?.count || 0,
+          vendor_name: vendorMap.get(p.vendor_id) || 'Vendor',
+        }))
+      );
     } catch (error: any) {
       console.error('Error fetching products:', error);
       toast.error('Failed to load products');
@@ -177,9 +211,9 @@ const Products = () => {
                 name={product.name}
                 price={product.price}
                 image={product.image_url || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500'}
-                rating={4.5}
-                reviews={0}
-                vendor="Vendor"
+                rating={product.avg_rating || 0}
+                reviews={product.review_count || 0}
+                vendor={product.vendor_name || 'Vendor'}
                 inStock={product.stock_quantity > 0}
                 onAddToCart={handleAddToCart}
               />

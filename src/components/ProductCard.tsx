@@ -77,8 +77,17 @@ export const ProductCard = ({
         </h3>
         
         <div className="flex items-center gap-1">
-          <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-          <span className="text-sm font-medium">{rating}</span>
+          {[1, 2, 3, 4, 5].map((star) => (
+            <Star
+              key={star}
+              className={`h-4 w-4 ${
+                star <= Math.round(rating)
+                  ? 'fill-yellow-400 text-yellow-400'
+                  : 'text-muted-foreground/30'
+              }`}
+            />
+          ))}
+          <span className="text-sm font-medium ml-1">{rating > 0 ? rating : '—'}</span>
           <span className="text-sm text-muted-foreground">({reviews})</span>
         </div>
         
