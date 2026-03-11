@@ -29,7 +29,11 @@ const menuItems = [
   { id: "vendors", label: "Vendors", icon: Store },
   { id: "riders", label: "Riders", icon: Truck },
   { id: "wallets", label: "Wallets & Escrow", icon: Wallet },
-  { id: "analytics", label: "Analytics", icon: TrendingUp },
+  { id: "payments", label: "Payment Collection", icon: CreditCard },
+  { id: "payouts", label: "Payouts", icon: Send },
+  { id: "ledger", label: "Financial Ledger", icon: BookOpen },
+  { id: "payment-analytics", label: "Payment Analytics", icon: BarChart3 },
+  { id: "analytics", label: "Revenue Analytics", icon: TrendingUp },
 ];
 
 export function AdminSidebar({ activeTab, onTabChange }: AdminSidebarProps) {
