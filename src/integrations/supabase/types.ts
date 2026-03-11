@@ -134,6 +134,57 @@ export type Database = {
           },
         ]
       }
+      ledger_entries: {
+        Row: {
+          amount: number
+          created_at: string
+          currency: string
+          description: string | null
+          id: string
+          metadata: Json | null
+          receiver_id: string | null
+          receiver_name: string | null
+          reference: string | null
+          reference_id: string | null
+          sender_id: string | null
+          sender_name: string | null
+          status: string
+          transaction_type: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          currency?: string
+          description?: string | null
+          id?: string
+          metadata?: Json | null
+          receiver_id?: string | null
+          receiver_name?: string | null
+          reference?: string | null
+          reference_id?: string | null
+          sender_id?: string | null
+          sender_name?: string | null
+          status?: string
+          transaction_type: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          currency?: string
+          description?: string | null
+          id?: string
+          metadata?: Json | null
+          receiver_id?: string | null
+          receiver_name?: string | null
+          reference?: string | null
+          reference_id?: string | null
+          sender_id?: string | null
+          sender_name?: string | null
+          status?: string
+          transaction_type?: string
+        }
+        Relationships: []
+      }
       order_items: {
         Row: {
           created_at: string
@@ -226,6 +277,145 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      payment_links: {
+        Row: {
+          amount: number
+          checkout_url: string | null
+          created_at: string
+          created_by: string
+          currency: string
+          description: string | null
+          expires_at: string | null
+          id: string
+          metadata: Json | null
+          order_id: string | null
+          recipient_name: string | null
+          recipient_phone: string | null
+          snippe_reference: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          checkout_url?: string | null
+          created_at?: string
+          created_by: string
+          currency?: string
+          description?: string | null
+          expires_at?: string | null
+          id?: string
+          metadata?: Json | null
+          order_id?: string | null
+          recipient_name?: string | null
+          recipient_phone?: string | null
+          snippe_reference?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          checkout_url?: string | null
+          created_at?: string
+          created_by?: string
+          currency?: string
+          description?: string | null
+          expires_at?: string | null
+          id?: string
+          metadata?: Json | null
+          order_id?: string | null
+          recipient_name?: string | null
+          recipient_phone?: string | null
+          snippe_reference?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_links_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payouts: {
+        Row: {
+          amount: number
+          approval_required: boolean
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          currency: string
+          description: string | null
+          id: string
+          metadata: Json | null
+          payout_type: string
+          recipient_name: string | null
+          recipient_phone: string
+          rejected_at: string | null
+          rejected_by: string | null
+          rejection_reason: string | null
+          requested_by: string
+          status: string
+          tembo_reference: string | null
+          updated_at: string
+          wallet_id: string | null
+        }
+        Insert: {
+          amount: number
+          approval_required?: boolean
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          currency?: string
+          description?: string | null
+          id?: string
+          metadata?: Json | null
+          payout_type?: string
+          recipient_name?: string | null
+          recipient_phone: string
+          rejected_at?: string | null
+          rejected_by?: string | null
+          rejection_reason?: string | null
+          requested_by: string
+          status?: string
+          tembo_reference?: string | null
+          updated_at?: string
+          wallet_id?: string | null
+        }
+        Update: {
+          amount?: number
+          approval_required?: boolean
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          currency?: string
+          description?: string | null
+          id?: string
+          metadata?: Json | null
+          payout_type?: string
+          recipient_name?: string | null
+          recipient_phone?: string
+          rejected_at?: string | null
+          rejected_by?: string | null
+          rejection_reason?: string | null
+          requested_by?: string
+          status?: string
+          tembo_reference?: string | null
+          updated_at?: string
+          wallet_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payouts_wallet_id_fkey"
+            columns: ["wallet_id"]
+            isOneToOne: false
+            referencedRelation: "wallets"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       products: {
         Row: {
