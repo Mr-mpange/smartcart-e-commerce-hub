@@ -1,1 +1,28 @@
 project_id = "kdiegxbfuohrbktonkmh"
+
+[functions.create-payment-link]
+verify_jwt = false
+
+[functions.tembo-payout]
+verify_jwt = false
+
+[functions.tembo-webhook]
+verify_jwt = false
+
+[functions.snippe-webhook]
+verify_jwt = false
+
+[functions.snippe-payment]
+verify_jwt = false
+
+[functions.zenopay-payment]
+verify_jwt = false
+
+[functions.zenopay-webhook]
+verify_jwt = false
+
+[functions.briq-sms]
+verify_jwt = false
+
+[functions.auto-release-escrow]
+verify_jwt = false
