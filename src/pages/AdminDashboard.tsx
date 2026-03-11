@@ -411,6 +411,10 @@ const AdminDashboard = () => {
               {activeTab === "vendors" && renderVendors()}
               {activeTab === "riders" && renderRiders()}
               {activeTab === "wallets" && <AdminWalletManagement />}
+              {activeTab === "payments" && <PaymentMonitoring />}
+              {activeTab === "payouts" && <PayoutManagement />}
+              {activeTab === "ledger" && <FinancialLedger />}
+              {activeTab === "payment-analytics" && <PaymentAnalytics />}
               {activeTab === "analytics" && <AdminRevenueAnalytics />}
             </div>
           </main>
