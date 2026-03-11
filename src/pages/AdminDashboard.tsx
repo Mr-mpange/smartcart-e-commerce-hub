@@ -12,6 +12,10 @@ import { AdminSidebar } from "@/components/AdminSidebar";
 import { AdminRevenueAnalytics } from "@/components/AdminRevenueAnalytics";
 import { AdminOrderManagement } from "@/components/AdminOrderManagement";
 import { AdminWalletManagement } from "@/components/AdminWalletManagement";
+import { PaymentMonitoring } from "@/components/PaymentMonitoring";
+import { PayoutManagement } from "@/components/PayoutManagement";
+import { FinancialLedger } from "@/components/FinancialLedger";
+import { PaymentAnalytics } from "@/components/PaymentAnalytics";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -407,6 +411,10 @@ const AdminDashboard = () => {
               {activeTab === "vendors" && renderVendors()}
               {activeTab === "riders" && renderRiders()}
               {activeTab === "wallets" && <AdminWalletManagement />}
+              {activeTab === "payments" && <PaymentMonitoring />}
+              {activeTab === "payouts" && <PayoutManagement />}
+              {activeTab === "ledger" && <FinancialLedger />}
+              {activeTab === "payment-analytics" && <PaymentAnalytics />}
               {activeTab === "analytics" && <AdminRevenueAnalytics />}
             </div>
           </main>
