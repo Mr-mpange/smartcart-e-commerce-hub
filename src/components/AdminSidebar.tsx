@@ -1,6 +1,6 @@
 import {
   Shield, Users, Store, Package, ShoppingCart, TrendingUp,
-  ChevronLeft, Wallet, Truck,
+  ChevronLeft, Wallet, Truck, CreditCard, Send, BookOpen, BarChart3,
 } from "lucide-react";
 import {
   Sidebar,
