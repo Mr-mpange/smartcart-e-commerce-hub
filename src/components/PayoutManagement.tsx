@@ -78,10 +78,22 @@ export function PayoutManagement() {
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) { toast.error("Enter a valid amount"); return; }
     if (!phone || phone.length < 9) { toast.error("Enter a valid phone number"); return; }
+    
     setSending(true);
     try {
+      // Ensure user is authenticated
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error('Please sign in to send payouts.');
+        setSending(false);
+        return;
+      }
+
       const { data, error } = await supabase.functions.invoke("tembo-payout", {
         body: { action: "send", recipient_phone: phone, recipient_name: name, amount: amt, description },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
       });
       if (error) throw error;
       if (data?.success) {
@@ -101,8 +113,18 @@ export function PayoutManagement() {
 
   const handleApprove = async (payoutId: string) => {
     try {
+      // Ensure user is authenticated
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error('Please sign in to approve payouts.');
+        return;
+      }
+
       const { data, error } = await supabase.functions.invoke("tembo-payout", {
         body: { action: "approve", payout_id: payoutId },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
       });
       if (error) throw error;
       toast.success("Payout approved and processing");
@@ -114,8 +136,18 @@ export function PayoutManagement() {
 
   const handleReject = async (payoutId: string) => {
     try {
+      // Ensure user is authenticated
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error('Please sign in to reject payouts.');
+        return;
+      }
+
       const { data, error } = await supabase.functions.invoke("tembo-payout", {
         body: { action: "reject", payout_id: payoutId, reason: "Rejected by admin" },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
       });
       if (error) throw error;
       toast.success("Payout rejected");

@@ -74,10 +74,22 @@ export function PaymentMonitoring() {
   const handleCreateLink = async () => {
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) { toast.error("Enter a valid amount"); return; }
+    
     setCreating(true);
     try {
+      // Ensure user is authenticated
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error('Please sign in to create payment links.');
+        setCreating(false);
+        return;
+      }
+
       const { data, error } = await supabase.functions.invoke("create-payment-link", {
         body: { amount: amt, description, recipient_name: recipientName, recipient_phone: recipientPhone },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
       });
       if (error) throw error;
       if (data?.success) {

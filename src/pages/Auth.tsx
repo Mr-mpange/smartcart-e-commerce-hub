@@ -6,15 +6,20 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { ShoppingCart } from 'lucide-react';
+import { ShoppingCart, Store, User } from 'lucide-react';
 
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
+  const [userType, setUserType] = useState<'customer' | 'vendor'>('customer');
+  const [businessName, setBusinessName] = useState('');
+  const [businessDescription, setBusinessDescription] = useState('');
   const [loading, setLoading] = useState(false);
   const { signIn, signUp, user, userRole, loading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -64,9 +69,43 @@ export default function Auth() {
           toast.error('Please enter your full name');
           return;
         }
-        const { error } = await signUp(email, password, fullName);
+        
+        if (userType === 'vendor' && !businessName.trim()) {
+          toast.error('Please enter your business name');
+          return;
+        }
+        
+        const { error, data } = await signUp(email, password, fullName);
         if (error) throw error;
-        toast.success('Account created successfully!');
+        
+        // If registering as vendor, create vendor profile
+        if (userType === 'vendor' && data?.user) {
+          const { error: roleError } = await supabase
+            .from('user_roles')
+            .insert([{ user_id: data.user.id, role: 'vendor' }]);
+
+          if (roleError && !roleError.message.includes('duplicate')) {
+            console.error('Role error:', roleError);
+          }
+
+          const { error: profileError } = await supabase
+            .from('vendor_profiles')
+            .insert([{
+              user_id: data.user.id,
+              business_name: businessName,
+              business_description: businessDescription || null,
+              is_approved: false,
+            }]);
+
+          if (profileError) {
+            console.error('Vendor profile error:', profileError);
+          }
+          
+          toast.success('Vendor account created! Awaiting admin approval.');
+        } else {
+          toast.success('Account created successfully!');
+        }
+        
         navigate('/');
       }
     } catch (error: any) {
@@ -129,6 +168,32 @@ export default function Auth() {
             
             <TabsContent value="signup">
               <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-3">
+                  <Label>I want to register as:</Label>
+                  <RadioGroup value={userType} onValueChange={(v) => setUserType(v as 'customer' | 'vendor')}>
+                    <div className="flex items-center space-x-2 border rounded-lg p-3 cursor-pointer hover:bg-accent" onClick={() => setUserType('customer')}>
+                      <RadioGroupItem value="customer" id="customer" />
+                      <Label htmlFor="customer" className="flex items-center gap-2 cursor-pointer flex-1">
+                        <User className="h-4 w-4" />
+                        <div>
+                          <div className="font-medium">Customer</div>
+                          <div className="text-xs text-muted-foreground">Browse and purchase products</div>
+                        </div>
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2 border rounded-lg p-3 cursor-pointer hover:bg-accent" onClick={() => setUserType('vendor')}>
+                      <RadioGroupItem value="vendor" id="vendor" />
+                      <Label htmlFor="vendor" className="flex items-center gap-2 cursor-pointer flex-1">
+                        <Store className="h-4 w-4" />
+                        <div>
+                          <div className="font-medium">Vendor</div>
+                          <div className="text-xs text-muted-foreground">Sell products on the platform</div>
+                        </div>
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="signup-name">Full Name</Label>
                   <Input
@@ -140,6 +205,33 @@ export default function Auth() {
                     required
                   />
                 </div>
+
+                {userType === 'vendor' && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="business-name">Business Name *</Label>
+                      <Input
+                        id="business-name"
+                        type="text"
+                        placeholder="Your Business Name"
+                        value={businessName}
+                        onChange={(e) => setBusinessName(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="business-desc">Business Description</Label>
+                      <Textarea
+                        id="business-desc"
+                        placeholder="Tell us about your business..."
+                        value={businessDescription}
+                        onChange={(e) => setBusinessDescription(e.target.value)}
+                        rows={3}
+                      />
+                    </div>
+                  </>
+                )}
+
                 <div className="space-y-2">
                   <Label htmlFor="signup-email">Email</Label>
                   <Input
@@ -163,6 +255,13 @@ export default function Auth() {
                     minLength={6}
                   />
                 </div>
+                
+                {userType === 'vendor' && (
+                  <div className="bg-muted p-3 rounded-lg text-sm text-muted-foreground">
+                    Note: Vendor accounts require admin approval before you can start selling.
+                  </div>
+                )}
+
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? 'Creating account...' : 'Create Account'}
                 </Button>

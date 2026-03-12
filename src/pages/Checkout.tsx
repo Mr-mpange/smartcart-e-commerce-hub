@@ -178,6 +178,14 @@ const Checkout = () => {
 
       // Process payment based on method
       if (formData.paymentMethod === 'mobile_money') {
+        // Ensure user is authenticated before making payment
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          setPaymentError('Please sign in to complete payment.');
+          setIsLoading(false);
+          return;
+        }
+
         const { data, error } = await supabase.functions.invoke('snippe-payment', {
           body: {
             order_id: order.id,
@@ -185,6 +193,9 @@ const Checkout = () => {
             buyer_name: formData.name,
             buyer_phone: formData.phone,
             amount: total,
+          },
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
           },
         });
 

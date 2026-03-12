@@ -1,12 +1,14 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Navbar } from "@/components/Navbar";
-import { Footer } from "@/components/Footer";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AdminSidebar } from "@/components/AdminSidebar";
 import { AdminRevenueAnalytics } from "@/components/AdminRevenueAnalytics";
@@ -16,12 +18,13 @@ import { PaymentMonitoring } from "@/components/PaymentMonitoring";
 import { PayoutManagement } from "@/components/PayoutManagement";
 import { FinancialLedger } from "@/components/FinancialLedger";
 import { PaymentAnalytics } from "@/components/PaymentAnalytics";
+import { VendorDocumentUpload } from "@/components/VendorDocumentUpload";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import {
   Shield, Users, Store, Package, CheckCircle2, XCircle,
-  Clock, Loader2, ShoppingCart, Truck,
+  Clock, Loader2, ShoppingCart, Truck, Plus, FileText,
 } from "lucide-react";
 
 interface VendorProfile {
@@ -30,6 +33,8 @@ interface VendorProfile {
   business_name: string;
   business_description: string | null;
   is_approved: boolean;
+  documents_verified: boolean;
+  verification_notes: string | null;
   created_at: string;
   profile?: { full_name: string; phone: string | null };
 }
@@ -63,6 +68,14 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
+  const [createVendorOpen, setCreateVendorOpen] = useState(false);
+  const [newVendorData, setNewVendorData] = useState({
+    email: '',
+    password: '',
+    fullName: '',
+    businessName: '',
+    businessDescription: '',
+  });
 
   useEffect(() => {
     if (userRole !== "admin") {
@@ -153,13 +166,65 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleCreateVendor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setActionLoading('create-vendor');
+    
+    try {
+      // Create user account
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email: newVendorData.email,
+        password: newVendorData.password,
+        email_confirm: true,
+        user_metadata: {
+          full_name: newVendorData.fullName,
+        },
+      });
+
+      if (authError) throw authError;
+      if (!authData.user) throw new Error('Failed to create user');
+
+      // Add vendor role
+      const { error: roleError } = await supabase
+        .from('user_roles')
+        .insert([{ user_id: authData.user.id, role: 'vendor' }]);
+
+      if (roleError) throw roleError;
+
+      // Create vendor profile (auto-approved by admin)
+      const { error: profileError } = await supabase
+        .from('vendor_profiles')
+        .insert([{
+          user_id: authData.user.id,
+          business_name: newVendorData.businessName,
+          business_description: newVendorData.businessDescription || null,
+          is_approved: true,
+        }]);
+
+      if (profileError) throw profileError;
+
+      toast.success('Vendor created successfully!');
+      setCreateVendorOpen(false);
+      setNewVendorData({
+        email: '',
+        password: '',
+        fullName: '',
+        businessName: '',
+        businessDescription: '',
+      });
+      fetchData();
+    } catch (error: any) {
+      console.error('Create vendor error:', error);
+      toast.error(error.message || 'Failed to create vendor');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex flex-col">
-        <Navbar />
-        <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        </div>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
       </div>
     );
   }
@@ -194,8 +259,83 @@ const AdminDashboard = () => {
   const renderVendors = () => {
     const renderTable = (list: VendorProfile[], tab: string) => (
       <Card>
-        <CardHeader>
-          <CardTitle className="capitalize">{tab} Vendors</CardTitle>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="capitalize">{tab} Vendors</CardTitle>
+          </div>
+          <Dialog open={createVendorOpen} onOpenChange={setCreateVendorOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm">
+                <Plus className="h-4 w-4 mr-2" />
+                Create Vendor
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Create New Vendor</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleCreateVendor} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="vendor-fullname">Full Name *</Label>
+                  <Input
+                    id="vendor-fullname"
+                    value={newVendorData.fullName}
+                    onChange={(e) => setNewVendorData({ ...newVendorData, fullName: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="vendor-email">Email *</Label>
+                  <Input
+                    id="vendor-email"
+                    type="email"
+                    value={newVendorData.email}
+                    onChange={(e) => setNewVendorData({ ...newVendorData, email: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="vendor-password">Password *</Label>
+                  <Input
+                    id="vendor-password"
+                    type="password"
+                    value={newVendorData.password}
+                    onChange={(e) => setNewVendorData({ ...newVendorData, password: e.target.value })}
+                    minLength={6}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="vendor-business">Business Name *</Label>
+                  <Input
+                    id="vendor-business"
+                    value={newVendorData.businessName}
+                    onChange={(e) => setNewVendorData({ ...newVendorData, businessName: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="vendor-desc">Business Description</Label>
+                  <Textarea
+                    id="vendor-desc"
+                    value={newVendorData.businessDescription}
+                    onChange={(e) => setNewVendorData({ ...newVendorData, businessDescription: e.target.value })}
+                    rows={3}
+                  />
+                </div>
+                <Button type="submit" className="w-full" disabled={actionLoading === 'create-vendor'}>
+                  {actionLoading === 'create-vendor' ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    'Create Vendor'
+                  )}
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
         </CardHeader>
         <CardContent>
           {list.length === 0 ? (
@@ -229,39 +369,63 @@ const AdminDashboard = () => {
                       {new Date(vendor.created_at).toLocaleDateString()}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={vendor.is_approved ? "default" : "outline"}>
-                        {vendor.is_approved ? "Approved" : "Pending"}
-                      </Badge>
+                      <div className="flex flex-col gap-1">
+                        <Badge variant={vendor.is_approved ? "default" : "outline"}>
+                          {vendor.is_approved ? "Approved" : "Pending"}
+                        </Badge>
+                        {vendor.documents_verified && (
+                          <Badge variant="secondary" className="text-xs">
+                            <FileText className="h-3 w-3 mr-1" />
+                            Docs Verified
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      {!vendor.is_approved ? (
-                        <Button
-                          size="sm"
-                          onClick={() => handleApproval(vendor.id, true)}
-                          disabled={actionLoading === vendor.id}
-                        >
-                          {actionLoading === vendor.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <CheckCircle2 className="h-4 w-4 mr-1" />
-                          )}
-                          Approve
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => handleApproval(vendor.id, false)}
-                          disabled={actionLoading === vendor.id}
-                        >
-                          {actionLoading === vendor.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <XCircle className="h-4 w-4 mr-1" />
-                          )}
-                          Revoke
-                        </Button>
-                      )}
+                      <div className="flex gap-2">
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button variant="outline" size="sm">
+                              <FileText className="h-4 w-4 mr-1" />
+                              Docs
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                            <DialogHeader>
+                              <DialogTitle>Vendor Documents - {vendor.business_name}</DialogTitle>
+                            </DialogHeader>
+                            <VendorDocumentUpload vendorId={vendor.id} readonly />
+                          </DialogContent>
+                        </Dialog>
+                        {!vendor.is_approved ? (
+                          <Button
+                            size="sm"
+                            onClick={() => handleApproval(vendor.id, true)}
+                            disabled={actionLoading === vendor.id}
+                          >
+                            {actionLoading === vendor.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <CheckCircle2 className="h-4 w-4 mr-1" />
+                            )}
+                            Approve
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => handleApproval(vendor.id, false)}
+                            disabled={actionLoading === vendor.id}
+                          >
+                            {actionLoading === vendor.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <XCircle className="h-4 w-4 mr-1" />
+                            )}
+                            Revoke
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -396,7 +560,6 @@ const AdminDashboard = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <Navbar />
       <SidebarProvider>
         <div className="flex-1 flex w-full">
           <AdminSidebar activeTab={activeTab} onTabChange={setActiveTab} />
@@ -420,7 +583,6 @@ const AdminDashboard = () => {
           </main>
         </div>
       </SidebarProvider>
-      <Footer />
     </div>
   );
 };
