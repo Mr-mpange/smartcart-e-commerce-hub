@@ -76,34 +76,69 @@ export default function Auth() {
         }
         
         const { error, data } = await signUp(email, password, fullName);
-        if (error) throw error;
+        if (error) {
+          // Handle specific error types
+          if (error.message?.includes('rate limit') || error.message?.includes('email rate')) {
+            throw new Error('Too many signup attempts. Please wait a few minutes and try again, or contact support to disable email confirmation.');
+          } else if (error.message?.includes('already registered')) {
+            throw new Error('This email is already registered. Please try signing in instead.');
+          } else {
+            throw error;
+          }
+        }
         
         // If registering as vendor, create vendor profile
         if (userType === 'vendor' && data?.user) {
-          const { error: roleError } = await supabase
-            .from('user_roles')
-            .insert([{ user_id: data.user.id, role: 'vendor' }]);
+          // Wait a moment for the user session to be established
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          try {
+            const { error: roleError } = await supabase
+              .from('user_roles')
+              .insert([{ user_id: data.user.id, role: 'vendor' }]);
 
-          if (roleError && !roleError.message.includes('duplicate')) {
-            console.error('Role error:', roleError);
+            if (roleError && !roleError.message.includes('duplicate')) {
+              console.error('Role error:', roleError);
+            }
+
+            const { error: profileError } = await supabase
+              .from('vendor_profiles')
+              .insert([{
+                user_id: data.user.id,
+                business_name: businessName,
+                business_description: businessDescription || null,
+                is_approved: false,
+              }]);
+
+            if (profileError) {
+              console.error('Vendor profile error:', profileError);
+            }
+            
+            toast.success('Vendor account created! Awaiting admin approval.');
+          } catch (error) {
+            console.error('Post-registration error:', error);
+            // Don't throw here - user is already created, just log the error
+            toast.success('Account created! Please contact admin to complete vendor setup.');
           }
-
-          const { error: profileError } = await supabase
-            .from('vendor_profiles')
-            .insert([{
-              user_id: data.user.id,
-              business_name: businessName,
-              business_description: businessDescription || null,
-              is_approved: false,
-            }]);
-
-          if (profileError) {
-            console.error('Vendor profile error:', profileError);
+        } else {
+          // For regular customers, add customer role
+          if (data?.user) {
+            try {
+              await supabase
+                .from('user_roles')
+                .insert([{ user_id: data.user.id, role: 'customer' }]);
+            } catch (error) {
+              console.error('Customer role error:', error);
+              // Don't throw - user is created, role can be added later
+            }
           }
           
-          toast.success('Vendor account created! Awaiting admin approval.');
-        } else {
           toast.success('Account created successfully!');
+          
+          // Show email confirmation message if email confirmation is enabled
+          if (data?.user && !data.session) {
+            toast.info('Please check your email and click the confirmation link to complete registration.', { duration: 8000 });
+          }
         }
         
         navigate('/');
