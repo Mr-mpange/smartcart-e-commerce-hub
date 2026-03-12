@@ -298,7 +298,7 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           phone_number: formattedPhone,
           app_key: BRIQ_API_KEY, // Using API key as app_key for now
-          sender_id: 'SmartCart',
+          sender_id: 'BRIQ', // Use BRIQ as sender_id for OTP
           otp_length: 6,
           minutes_to_expire: 5,
           delivery_method: 'sms'
@@ -371,7 +371,7 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           content: message,
           recipients: [formattedPhone],
-          sender_id: 'SmartCart',
+          sender_id: 'BRIQ', // Use BRIQ as sender_id for SMS
         }),
       });
       } catch (newAPIError) {
