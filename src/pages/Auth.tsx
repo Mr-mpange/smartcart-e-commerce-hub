@@ -16,11 +16,16 @@ export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [phone, setPhone] = useState('');
+  const [otp, setOtp] = useState('');
   const [fullName, setFullName] = useState('');
   const [userType, setUserType] = useState<'customer' | 'vendor'>('customer');
   const [businessName, setBusinessName] = useState('');
   const [businessDescription, setBusinessDescription] = useState('');
   const [loading, setLoading] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [loginStep, setLoginStep] = useState<'credentials' | 'otp'>('credentials');
   const { signIn, signUp, user, userRole, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
@@ -33,40 +38,112 @@ export default function Auth() {
     }
   }, [authLoading, user, userRole, navigate]);
 
+  const handleSendOtp = async () => {
+    if (!email) {
+      toast.error('Please enter your email');
+      return;
+    }
+
+    setOtpLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('otp-auth', {
+        body: {
+          action: 'generate',
+          email: email,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        setOtpSent(true);
+        toast.success('OTP sent to your registered phone number');
+      } else {
+        throw new Error(data?.error || 'Failed to send OTP');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to send OTP');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleOtpLogin = async () => {
+    if (!otp) {
+      toast.error('Please enter the OTP');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // First verify OTP
+      const { data: otpData, error: otpError } = await supabase.functions.invoke('otp-auth', {
+        body: {
+          action: 'verify',
+          email: email,
+          otp_code: otp,
+        },
+      });
+
+      if (otpError) throw otpError;
+
+      if (!otpData?.success) {
+        throw new Error(otpData?.error || 'Invalid OTP');
+      }
+
+      toast.success('Login successful!');
+      
+      // Navigate based on user role
+      const { data: { user: signedInUser } } = await supabase.auth.getUser();
+      if (signedInUser) {
+        const { data: roles } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', signedInUser.id);
+        
+        const roleList = roles?.map(r => r.role) || [];
+        if (roleList.includes('admin')) {
+          navigate('/admin/dashboard');
+        } else if (roleList.includes('vendor')) {
+          navigate('/vendor/dashboard');
+        } else if (roleList.includes('delivery_rider')) {
+          navigate('/rider/dashboard');
+        } else {
+          navigate('/');
+        }
+      } else {
+        navigate('/');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Login failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
       if (isLogin) {
+        // First step: validate credentials
         const { error } = await signIn(email, password);
         if (error) throw error;
-        toast.success('Welcome back!');
         
-        // Fetch user role to redirect to appropriate dashboard
-        const { data: { user: signedInUser } } = await supabase.auth.getUser();
-        if (signedInUser) {
-          const { data: roles } = await supabase
-            .from('user_roles')
-            .select('role')
-            .eq('user_id', signedInUser.id);
-          
-          const roleList = roles?.map(r => r.role) || [];
-          if (roleList.includes('admin')) {
-            navigate('/admin/dashboard');
-          } else if (roleList.includes('vendor')) {
-            navigate('/vendor/dashboard');
-          } else if (roleList.includes('delivery_rider')) {
-            navigate('/rider/dashboard');
-          } else {
-            navigate('/');
-          }
-        } else {
-          navigate('/');
-        }
+        // After successful login, send OTP
+        setLoginStep('otp');
+        setLoading(false);
+        handleSendOtp();
+        return;
       } else {
         if (!fullName.trim()) {
           toast.error('Please enter your full name');
+          return;
+        }
+        
+        if (!phone.trim()) {
+          toast.error('Please enter your phone number');
           return;
         }
         
@@ -85,6 +162,14 @@ export default function Auth() {
           } else {
             throw error;
           }
+        }
+        
+        // Update profile with phone number
+        if (data?.user) {
+          await supabase
+            .from('profiles')
+            .update({ phone: phone })
+            .eq('id', data.user.id);
         }
         
         // If registering as vendor, create vendor profile
@@ -172,33 +257,103 @@ export default function Auth() {
             </TabsList>
             
             <TabsContent value="login">
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="login-email">Email</Label>
-                  <Input
-                    id="login-email"
-                    type="email"
-                    placeholder="you@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                  />
+              {loginStep === 'credentials' ? (
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="login-email">Email</Label>
+                    <Input
+                      id="login-email"
+                      type="email"
+                      placeholder="you@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="login-password">Password</Label>
+                    <Input
+                      id="login-password"
+                      type="password"
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <Button type="submit" className="w-full" disabled={loading}>
+                    {loading ? 'Signing in...' : 'Sign In'}
+                  </Button>
+                </form>
+              ) : (
+                <div className="space-y-4">
+                  <div className="text-center space-y-2">
+                    <h3 className="text-lg font-semibold">Verify Your Identity</h3>
+                    <p className="text-sm text-muted-foreground">
+                      We've sent a verification code to your registered phone number
+                    </p>
+                  </div>
+                  
+                  {!otpSent ? (
+                    <Button 
+                      onClick={handleSendOtp} 
+                      disabled={otpLoading}
+                      className="w-full"
+                    >
+                      {otpLoading ? 'Sending OTP...' : 'Send Verification Code'}
+                    </Button>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="login-otp">Enter Verification Code</Label>
+                        <Input
+                          id="login-otp"
+                          type="text"
+                          placeholder="123456"
+                          value={otp}
+                          onChange={(e) => setOtp(e.target.value)}
+                          maxLength={6}
+                          required
+                        />
+                      </div>
+                      
+                      <Button 
+                        onClick={handleOtpLogin}
+                        disabled={loading || !otp}
+                        className="w-full"
+                      >
+                        {loading ? 'Verifying...' : 'Verify & Login'}
+                      </Button>
+                      
+                      <div className="flex justify-center">
+                        <Button 
+                          type="button" 
+                          onClick={handleSendOtp} 
+                          disabled={otpLoading}
+                          variant="ghost"
+                          size="sm"
+                        >
+                          Resend Code
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <Button 
+                    onClick={() => {
+                      setLoginStep('credentials');
+                      setOtpSent(false);
+                      setOtp('');
+                    }}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    Back to Login
+                  </Button>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="login-password">Password</Label>
-                  <Input
-                    id="login-password"
-                    type="password"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                  />
-                </div>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? 'Signing in...' : 'Sign In'}
-                </Button>
-              </form>
+              )}
             </TabsContent>
             
             <TabsContent value="signup">
@@ -237,6 +392,18 @@ export default function Auth() {
                     placeholder="John Doe"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="signup-phone">Phone Number</Label>
+                  <Input
+                    id="signup-phone"
+                    type="tel"
+                    placeholder="0712345678"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
                     required
                   />
                 </div>

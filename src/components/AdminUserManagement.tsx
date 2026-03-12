@@ -37,6 +37,8 @@ export function AdminUserManagement() {
   const [newUserData, setNewUserData] = useState({
     fullName: '',
     phone: '',
+    email: '',
+    password: '',
     role: 'customer' as UserRole,
   });
 
@@ -116,31 +118,62 @@ export function AdminUserManagement() {
     setActionLoading('create-user');
 
     try {
-      // Generate a UUID for the new user
-      const userId = crypto.randomUUID();
+      console.log('Creating user with data:', newUserData);
+      
+      if (!newUserData.email || !newUserData.password) {
+        throw new Error('Email and password are required');
+      }
+      
+      if (newUserData.password.length < 6) {
+        throw new Error('Password must be at least 6 characters long');
+      }
+      
+      // Create actual user account using Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: newUserData.email,
+        password: newUserData.password,
+        options: {
+          data: {
+            full_name: newUserData.fullName,
+          },
+        },
+      });
 
-      // Create profile
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert([{
-          id: userId,
-          full_name: newUserData.fullName,
-          phone: newUserData.phone || null,
-        }]);
+      if (authError) {
+        console.error('Auth creation error:', authError);
+        throw new Error(`Failed to create user account: ${authError.message}`);
+      }
 
-      if (profileError) throw profileError;
+      if (!authData.user) {
+        throw new Error('User creation failed - no user returned');
+      }
+
+      // Update profile with phone number
+      if (newUserData.phone) {
+        const { error: profileUpdateError } = await supabase
+          .from('profiles')
+          .update({ phone: newUserData.phone })
+          .eq('id', authData.user.id);
+
+        if (profileUpdateError) {
+          console.error('Profile update error:', profileUpdateError);
+        }
+      }
 
       // Add role
       const { error: roleError } = await supabase
         .from('user_roles')
-        .insert([{ user_id: userId, role: newUserData.role }]);
+        .insert([{ user_id: authData.user.id, role: newUserData.role }]);
 
-      if (roleError) throw roleError;
+      if (roleError) {
+        console.error('Role creation error:', roleError);
+        throw roleError;
+      }
 
       toast.success('User created successfully!');
       setCreateUserOpen(false);
-      setNewUserData({ fullName: '', phone: '', role: 'customer' as UserRole });
-      fetchUsers();
+      setNewUserData({ fullName: '', phone: '', email: '', password: '', role: 'customer' as UserRole });
+      await fetchUsers();
     } catch (error: any) {
       console.error('Create user error:', error);
       toast.error(error.message || 'Failed to create user');
@@ -299,6 +332,8 @@ export function AdminUserManagement() {
     setNewUserData({
       fullName: user.full_name,
       phone: user.phone || '',
+      email: '', // Email cannot be edited
+      password: '', // Password cannot be edited
       role: (user.roles[0] || 'customer') as UserRole,
     });
     setEditUserOpen(true);
@@ -386,6 +421,27 @@ export function AdminUserManagement() {
                         value={newUserData.fullName}
                         onChange={(e) => setNewUserData({ ...newUserData, fullName: e.target.value })}
                         required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="create-email">Email *</Label>
+                      <Input
+                        id="create-email"
+                        type="email"
+                        value={newUserData.email}
+                        onChange={(e) => setNewUserData({ ...newUserData, email: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="create-password">Password *</Label>
+                      <Input
+                        id="create-password"
+                        type="password"
+                        value={newUserData.password}
+                        onChange={(e) => setNewUserData({ ...newUserData, password: e.target.value })}
+                        required
+                        minLength={6}
                       />
                     </div>
                     <div className="space-y-2">
@@ -561,4 +617,6 @@ export function AdminUserManagement() {
       </Dialog>
     </div>
   );
+
 }
+  

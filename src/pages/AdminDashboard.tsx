@@ -73,6 +73,7 @@ const AdminDashboard = () => {
   const [newVendorData, setNewVendorData] = useState({
     email: '',
     fullName: '',
+    password: '',
     businessName: '',
     businessDescription: '',
   });
@@ -212,34 +213,61 @@ const AdminDashboard = () => {
     try {
       console.log('Creating vendor with data:', newVendorData);
       
-      // Get current admin user
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-      if (!currentUser) {
-        throw new Error('Admin user not found');
+      if (!newVendorData.password || newVendorData.password.length < 6) {
+        throw new Error('Password must be at least 6 characters long');
       }
       
-      // Create vendor profile using admin's user_id but mark it as admin-created
-      const { data: vendorData, error: vendorError } = await supabase
-        .from('vendor_profiles')
-        .insert([{
-          user_id: currentUser.id, // Use admin's user_id
-          business_name: newVendorData.businessName,
-          business_description: `${newVendorData.businessDescription || ''}\n[ADMIN_CREATED - Contact: ${newVendorData.email} - Owner: ${newVendorData.fullName}]`,
-          is_approved: true, // Admin-created vendors are auto-approved
-        }])
-        .select()
-        .single();
+      // Create actual user account using Supabase Auth Admin API
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: newVendorData.email,
+        password: newVendorData.password,
+        options: {
+          data: {
+            full_name: newVendorData.fullName,
+          },
+        },
+      });
 
-      if (vendorError) {
-        console.error('Vendor creation error:', vendorError);
-        throw vendorError;
+      if (authError) {
+        console.error('Auth creation error:', authError);
+        throw new Error(`Failed to create user account: ${authError.message}`);
       }
 
-      toast.success(`Vendor "${newVendorData.businessName}" created successfully! Contact: ${newVendorData.email}`);
+      if (!authData.user) {
+        throw new Error('User creation failed - no user returned');
+      }
+
+      // Add vendor role
+      const { error: roleError } = await supabase
+        .from('user_roles')
+        .insert([{ user_id: authData.user.id, role: 'vendor' }]);
+
+      if (roleError) {
+        console.error('Role creation error:', roleError);
+        // Continue anyway - role can be added later
+      }
+
+      // Create vendor profile
+      const { error: vendorError } = await supabase
+        .from('vendor_profiles')
+        .insert([{
+          user_id: authData.user.id,
+          business_name: newVendorData.businessName,
+          business_description: newVendorData.businessDescription || null,
+          is_approved: true, // Admin-created vendors are auto-approved
+        }]);
+
+      if (vendorError) {
+        console.error('Vendor profile creation error:', vendorError);
+        throw new Error(`Failed to create vendor profile: ${vendorError.message}`);
+      }
+
+      toast.success(`Vendor "${newVendorData.businessName}" created successfully! Login: ${newVendorData.email}`);
       setCreateVendorOpen(false);
       setNewVendorData({
         email: '',
         fullName: '',
+        password: '',
         businessName: '',
         businessDescription: '',
       });
@@ -390,17 +418,29 @@ const AdminDashboard = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="vendor-email">Contact Email</Label>
+                  <Label htmlFor="vendor-email">Email *</Label>
                   <Input
                     id="vendor-email"
                     type="email"
                     value={newVendorData.email}
                     onChange={(e) => setNewVendorData({ ...newVendorData, email: e.target.value })}
-                    placeholder="Vendor's contact email"
+                    placeholder="Vendor's email address"
                     required
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="vendor-password">Password *</Label>
+                  <Input
+                    id="vendor-password"
+                    type="password"
+                    value={newVendorData.password}
+                    onChange={(e) => setNewVendorData({ ...newVendorData, password: e.target.value })}
+                    placeholder="Vendor's login password"
+                    required
+                    minLength={6}
+                  />
                   <p className="text-xs text-muted-foreground">
-                    This email will be used for contact purposes. The vendor will need to register separately.
+                    Minimum 6 characters. Share this with the vendor securely.
                   </p>
                 </div>
                 <div className="space-y-2">
