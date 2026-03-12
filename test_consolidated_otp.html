@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Consolidated OTP System</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 600px; margin: 0 auto; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Consolidated OTP System Test</h1>
+        
+        <div class="test-section info">
+            <h3>📋 Test Configuration</h3>
+            <p><strong>Function:</strong> briq-sms (consolidated)</p>
+            <p><strong>Test Email:</strong> admin@test.com</p>
+            <p><strong>Expected Phone:</strong> +255683859574</p>
+        </div>
+
+        <div class="test-section">
+            <h3>🔐 Step 1: Generate OTP</h3>
+            <button onclick="testGenerateOTP()">Generate OTP</button>
+            <div id="generate-result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>✅ Step 2: Verify OTP</h3>
+            <input type="text" id="otp-input" placeholder="Enter OTP from console/SMS" maxlength="6">
+            <button onclick="testVerifyOTP()">Verify OTP</button>
+            <div id="verify-result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>📱 Step 3: Test Direct SMS</h3>
+            <button onclick="testDirectSMS()">Send Test SMS</button>
+            <div id="sms-result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>📊 Test Results Summary</h3>
+            <div id="summary"></div>
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://kdiegxbfuohrbktonkmh.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtkaWVneGJmdW9ocmJrdG9ua21oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQyOTIzMTYsImV4cCI6MjA3OTg2ODMxNn0.EyJWQtTjnTgW4uJcCqFasEn49vT1x0mSsxEz1H4CT1o';
+        
+        let testResults = {
+            generate: null,
+            verify: null,
+            sms: null
+        };
+
+        async function testGenerateOTP() {
+            const resultDiv = document.getElementById('generate-result');
+            resultDiv.innerHTML = '<p>🔄 Generating OTP...</p>';
+            
+            try {
+                console.log('🚀 Testing OTP Generation...');
+                
+                const response = await fetch(`${SUPABASE_URL}/functions/v1/briq-sms`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                    },
+                    body: JSON.stringify({
+                        action: 'generate_otp',
+                        email: 'admin@test.com'
+                    })
+                });
+                
+                console.log('📡 Response Status:', response.status);
+                console.log('📡 Response Headers:', Object.fromEntries(response.headers.entries()));
+                
+                const responseText = await response.text();
+                console.log('📡 Raw Response:', responseText);
+                
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                    console.log('📦 Parsed Response:', data);
+                } catch (parseError) {
+                    console.error('❌ JSON Parse Error:', parseError);
+                    throw new Error(`Invalid JSON response: ${responseText.substring(0, 200)}...`);
+                }
+                
+                if (response.ok && data.success) {
+                    testResults.generate = true;
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            <h4>✅ OTP Generation Successful</h4>
+                            <p><strong>Message:</strong> ${data.message}</p>
+                            <p><strong>Expires In:</strong> ${data.expires_in} seconds</p>
+                            <p>📱 Check console for OTP or SMS on +255683859574</p>
+                        </div>
+                    `;
+                } else {
+                    throw new Error(data.error || 'OTP generation failed');
+                }
+                
+            } catch (error) {
+                testResults.generate = false;
+                console.error('❌ Generate OTP Error:', error);
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h4>❌ OTP Generation Failed</h4>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                        <pre>${JSON.stringify(error, null, 2)}</pre>
+                    </div>
+                `;
+            }
+            
+            updateSummary();
+        }
+
+        async function testVerifyOTP() {
+            const otpInput = document.getElementById('otp-input');
+            const resultDiv = document.getElementById('verify-result');
+            const otp = otpInput.value.trim();
+            
+            if (!otp) {
+                resultDiv.innerHTML = '<div class="error"><p>❌ Please enter OTP</p></div>';
+                return;
+            }
+            
+            resultDiv.innerHTML = '<p>🔄 Verifying OTP...</p>';
+            
+            try {
+                console.log('🔍 Testing OTP Verification...');
+                console.log('🔢 OTP Code:', otp);
+                
+                const response = await fetch(`${SUPABASE_URL}/functions/v1/briq-sms`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                    },
+                    body: JSON.stringify({
+                        action: 'verify_otp',
+                        email: 'admin@test.com',
+                        otp_code: otp
+                    })
+                });
+                
+                console.log('📡 Verify Response Status:', response.status);
+                
+                const responseText = await response.text();
+                console.log('📡 Verify Raw Response:', responseText);
+                
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                    console.log('📦 Verify Parsed Response:', data);
+                } catch (parseError) {
+                    console.error('❌ Verify JSON Parse Error:', parseError);
+                    throw new Error(`Invalid JSON response: ${responseText.substring(0, 200)}...`);
+                }
+                
+                if (response.ok && data.success) {
+                    testResults.verify = true;
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            <h4>✅ OTP Verification Successful</h4>
+                            <p><strong>Message:</strong> ${data.message}</p>
+                            <p><strong>Phone:</strong> ${data.phone_number}</p>
+                        </div>
+                    `;
+                } else {
+                    testResults.verify = false;
+                    resultDiv.innerHTML = `
+                        <div class="error">
+                            <h4>❌ OTP Verification Failed</h4>
+                            <p><strong>Error:</strong> ${data.error}</p>
+                        </div>
+                    `;
+                }
+                
+            } catch (error) {
+                testResults.verify = false;
+                console.error('❌ Verify OTP Error:', error);
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h4>❌ OTP Verification Failed</h4>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                        <pre>${JSON.stringify(error, null, 2)}</pre>
+                    </div>
+                `;
+            }
+            
+            updateSummary();
+        }
+
+        async function testDirectSMS() {
+            const resultDiv = document.getElementById('sms-result');
+            resultDiv.innerHTML = '<p>🔄 Sending test SMS...</p>';
+            
+            try {
+                console.log('📱 Testing Direct SMS...');
+                
+                const response = await fetch(`${SUPABASE_URL}/functions/v1/briq-sms`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                    },
+                    body: JSON.stringify({
+                        phone_number: '+255683859574',
+                        message: 'Test SMS from SmartCart consolidated system - ' + new Date().toLocaleTimeString()
+                    })
+                });
+                
+                console.log('📡 SMS Response Status:', response.status);
+                
+                const responseText = await response.text();
+                console.log('📡 SMS Raw Response:', responseText);
+                
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                    console.log('📦 SMS Parsed Response:', data);
+                } catch (parseError) {
+                    console.error('❌ SMS JSON Parse Error:', parseError);
+                    throw new Error(`Invalid JSON response: ${responseText.substring(0, 200)}...`);
+                }
+                
+                if (response.ok && data.success) {
+                    testResults.sms = true;
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            <h4>✅ Direct SMS Successful</h4>
+                            <p><strong>Message:</strong> ${data.message}</p>
+                            <p>📱 Check phone +255683859574 for SMS</p>
+                        </div>
+                    `;
+                } else {
+                    testResults.sms = false;
+                    resultDiv.innerHTML = `
+                        <div class="error">
+                            <h4>❌ Direct SMS Failed</h4>
+                            <p><strong>Error:</strong> ${data.error}</p>
+                        </div>
+                    `;
+                }
+                
+            } catch (error) {
+                testResults.sms = false;
+                console.error('❌ Direct SMS Error:', error);
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h4>❌ Direct SMS Failed</h4>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                        <pre>${JSON.stringify(error, null, 2)}</pre>
+                    </div>
+                `;
+            }
+            
+            updateSummary();
+        }
+
+        function updateSummary() {
+            const summaryDiv = document.getElementById('summary');
+            const total = Object.values(testResults).filter(r => r !== null).length;
+            const passed = Object.values(testResults).filter(r => r === true).length;
+            const failed = Object.values(testResults).filter(r => r === false).length;
+            
+            let summaryClass = 'info';
+            if (total > 0) {
+                summaryClass = failed === 0 ? 'success' : 'error';
+            }
+            
+            summaryDiv.innerHTML = `
+                <div class="${summaryClass}">
+                    <h4>📊 Test Summary</h4>
+                    <p><strong>Total Tests:</strong> ${total}</p>
+                    <p><strong>✅ Passed:</strong> ${passed}</p>
+                    <p><strong>❌ Failed:</strong> ${failed}</p>
+                    <ul>
+                        <li>Generate OTP: ${testResults.generate === null ? '⏳ Pending' : testResults.generate ? '✅ Pass' : '❌ Fail'}</li>
+                        <li>Verify OTP: ${testResults.verify === null ? '⏳ Pending' : testResults.verify ? '✅ Pass' : '❌ Fail'}</li>
+                        <li>Direct SMS: ${testResults.sms === null ? '⏳ Pending' : testResults.sms ? '✅ Pass' : '❌ Fail'}</li>
+                    </ul>
+                </div>
+            `;
+        }
+
+        // Initialize summary
+        updateSummary();
+        
+        console.log('🧪 Consolidated OTP Test Page Loaded');
+        console.log('📋 Available Tests:');
+        console.log('1. Generate OTP - Tests briq-sms with action: generate_otp');
+        console.log('2. Verify OTP - Tests briq-sms with action: verify_otp');
+        console.log('3. Direct SMS - Tests briq-sms direct messaging');
+    </script>
+</body>
+</html>

@@ -1,7 +1,10 @@
 import { Link } from "react-router-dom";
 import { Facebook, Twitter, Instagram, Mail } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 export const Footer = () => {
+  const { userRole } = useAuth();
+  
   return (
     <footer className="bg-secondary/50 border-t mt-20">
       <div className="container mx-auto px-4 py-12">
@@ -48,7 +51,9 @@ export const Footer = () => {
             <h3 className="font-semibold mb-4">Vendor</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li><Link to="/vendors" className="hover:text-primary transition-colors">Become a Vendor</Link></li>
-              <li><Link to="/vendor/dashboard" className="hover:text-primary transition-colors">Vendor Dashboard</Link></li>
+              {userRole === 'vendor' && (
+                <li><Link to="/vendor/dashboard" className="hover:text-primary transition-colors">Vendor Dashboard</Link></li>
+              )}
               <li><Link to="/vendors" className="hover:text-primary transition-colors">Vendor Guidelines</Link></li>
               <li><Link to="/vendors" className="hover:text-primary transition-colors">Support</Link></li>
             </ul>

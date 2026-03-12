@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Navbar = () => {
@@ -13,6 +13,17 @@ export const Navbar = () => {
   const navigate = useNavigate();
   const [cartCount, setCartCount] = useState(0);
   const [wishlistCount, setWishlistCount] = useState(0);
+  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const debouncedFetchCounts = useCallback(() => {
+    if (fetchTimeoutRef.current) {
+      clearTimeout(fetchTimeoutRef.current);
+    }
+    fetchTimeoutRef.current = setTimeout(() => {
+      fetchCartCount();
+      fetchWishlistCount();
+    }, 300); // 300ms debounce
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -20,15 +31,20 @@ export const Navbar = () => {
       fetchWishlistCount();
       const channel = supabase
         .channel('cart-count')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'cart_items', filter: `user_id=eq.${user.id}` }, () => fetchCartCount())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'wishlists', filter: `user_id=eq.${user.id}` }, () => fetchWishlistCount())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'cart_items', filter: `user_id=eq.${user.id}` }, debouncedFetchCounts)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'wishlists', filter: `user_id=eq.${user.id}` }, debouncedFetchCounts)
         .subscribe();
-      return () => { supabase.removeChannel(channel); };
+      return () => { 
+        if (fetchTimeoutRef.current) {
+          clearTimeout(fetchTimeoutRef.current);
+        }
+        supabase.removeChannel(channel); 
+      };
     } else {
       setCartCount(0);
       setWishlistCount(0);
     }
-  }, [user]);
+  }, [user, debouncedFetchCounts]);
 
   const fetchCartCount = async () => {
     try {

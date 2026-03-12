@@ -4,6 +4,8 @@ export interface CorsHeaders {
   [key: string]: string;
   'Access-Control-Allow-Origin': string;
   'Access-Control-Allow-Headers': string;
+  'Access-Control-Allow-Methods': string;
+  'Access-Control-Max-Age': string;
 }
 
 export interface OTPRequest {

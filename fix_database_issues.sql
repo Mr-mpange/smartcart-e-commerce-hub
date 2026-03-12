@@ -1,8 +1,10 @@
 -- Fix database issues mentioned in the summary
 
--- 1. Clean up any invalid UUID references
-DELETE FROM public.user_roles WHERE user_id = 'USER_ID_FROM_ABOVE';
-DELETE FROM public.user_roles WHERE user_id = '00000000-0000-0000-0000-000000000000';
+-- 1. Clean up any user_roles with invalid user_id references
+DELETE FROM public.user_roles 
+WHERE user_id NOT IN (
+  SELECT id FROM auth.users
+) OR user_id = '00000000-0000-0000-0000-000000000000';
 
 -- 2. Clean up any profiles with invalid foreign key references
 DELETE FROM public.profiles WHERE id NOT IN (

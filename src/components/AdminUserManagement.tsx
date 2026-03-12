@@ -128,15 +128,17 @@ export function AdminUserManagement() {
         throw new Error('Password must be at least 6 characters long');
       }
       
-      // Create actual user account using Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      // Store current admin session
+      const { data: { session: adminSession } } = await supabase.auth.getSession();
+      
+      // Create user using admin API (doesn't affect current session)
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
         email: newUserData.email,
         password: newUserData.password,
-        options: {
-          data: {
-            full_name: newUserData.fullName,
-          },
+        user_metadata: {
+          full_name: newUserData.fullName,
         },
+        email_confirm: true, // Auto-confirm email for admin-created users
       });
 
       if (authError) {
@@ -168,6 +170,11 @@ export function AdminUserManagement() {
       if (roleError) {
         console.error('Role creation error:', roleError);
         throw roleError;
+      }
+
+      // Restore admin session if it was lost
+      if (adminSession) {
+        await supabase.auth.setSession(adminSession);
       }
 
       toast.success('User created successfully!');

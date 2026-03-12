@@ -11,6 +11,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { ShoppingCart, Store, User } from 'lucide-react';
+import { sendOTP, verifyOTP } from '@/lib/otp';
+import { sendOTPSMS, verifyOTPSMS } from '@/lib/sms';
 
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
@@ -25,6 +27,7 @@ export default function Auth() {
   const [loading, setLoading] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [otpLoading, setOtpLoading] = useState(false);
+  const [userPhone, setUserPhone] = useState('');
   const [loginStep, setLoginStep] = useState<'credentials' | 'otp'>('credentials');
   const { signIn, signUp, user, userRole, loading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -39,30 +42,76 @@ export default function Auth() {
   }, [authLoading, user, userRole, navigate]);
 
   const handleSendOtp = async () => {
-    if (!email) {
-      toast.error('Please enter your email');
+    if (!email || !password) {
+      toast.error('Please enter email and password');
       return;
     }
 
     setOtpLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('otp-auth', {
-        body: {
-          action: 'generate',
-          email: email,
-        },
+      // First validate credentials
+      const { data: authUser, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
+      
+      if (authError) throw authError;
+      
+      // Get user profile to get phone number
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('phone')
+        .eq('id', authUser.user.id)
+        .maybeSingle();
 
-      if (error) throw error;
+      // Sign out immediately after validation
+      await supabase.auth.signOut();
 
-      if (data?.success) {
-        setOtpSent(true);
-        toast.success('OTP sent to your registered phone number');
-      } else {
-        throw new Error(data?.error || 'Failed to send OTP');
+      if (profileError) {
+        console.error('Profile fetch error:', profileError);
+        throw new Error('Error fetching user profile. Please contact support.');
       }
+
+      if (!profile?.phone) {
+        throw new Error('No phone number found for this account. Please contact support.');
+      }
+
+      // Try consolidated briq-sms Edge Function first, fall back to local OTP
+      try {
+        const result = await sendOTPSMS(email);
+
+        if (result.success) {
+          setOtpSent(true);
+          const maskedPhone = profile.phone.replace(/(\+\d{3})(\d{3})(\d{3})(\d{3})/, '$1***$3$4');
+          setUserPhone(maskedPhone);
+          toast.success('Verification code sent to your registered phone number');
+          return;
+        } else {
+          throw new Error(result.error || 'Edge Function failed');
+        }
+      } catch (edgeFunctionError) {
+        console.warn('Edge Function failed, using local OTP:', edgeFunctionError);
+        
+        // Fall back to local OTP system
+        const result = await sendOTP(email, profile.phone);
+        
+        if (result.success) {
+          setOtpSent(true);
+          const maskedPhone = profile.phone.replace(/(\+\d{3})(\d{3})(\d{3})(\d{3})/, '$1***$3$4');
+          setUserPhone(maskedPhone);
+          toast.success(result.message || `Verification code sent to ${maskedPhone}`);
+        } else {
+          throw new Error(result.error || 'Failed to send OTP');
+        }
+      }
+      
     } catch (error: any) {
       toast.error(error.message || 'Failed to send OTP');
+      // Reset to credentials step on error
+      setLoginStep('credentials');
+      setOtpSent(false);
+      setOtp('');
+      setUserPhone('');
     } finally {
       setOtpLoading(false);
     }
@@ -76,30 +125,53 @@ export default function Auth() {
 
     setLoading(true);
     try {
-      // First verify OTP
-      const { data: otpData, error: otpError } = await supabase.functions.invoke('otp-auth', {
-        body: {
-          action: 'verify',
-          email: email,
-          otp_code: otp,
-        },
+      // Try consolidated briq-sms Edge Function first, fall back to local verification
+      let otpValid = false;
+      
+      try {
+        const result = await verifyOTPSMS(email, otp);
+        
+        if (result.success) {
+          otpValid = true;
+        } else {
+          throw new Error(result.error || 'Invalid OTP');
+        }
+      } catch (edgeFunctionError) {
+        console.warn('Edge Function verification failed, using local OTP:', edgeFunctionError);
+        
+        // Fall back to local OTP verification
+        const result = await verifyOTP(email, otp);
+        
+        if (result.success) {
+          otpValid = true;
+        } else {
+          throw new Error(result.error || 'Invalid OTP');
+        }
+      }
+
+      if (!otpValid) {
+        throw new Error('OTP verification failed');
+      }
+
+      // If OTP is valid, now actually sign in the user
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
 
-      if (otpError) throw otpError;
-
-      if (!otpData?.success) {
-        throw new Error(otpData?.error || 'Invalid OTP');
-      }
+      if (signInError) throw signInError;
 
       toast.success('Login successful!');
       
+      // Wait for auth state to settle before navigating
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
       // Navigate based on user role
-      const { data: { user: signedInUser } } = await supabase.auth.getUser();
-      if (signedInUser) {
+      if (signInData?.user) {
         const { data: roles } = await supabase
           .from('user_roles')
           .select('role')
-          .eq('user_id', signedInUser.id);
+          .eq('user_id', signInData.user.id);
         
         const roleList = roles?.map(r => r.role) || [];
         if (roleList.includes('admin')) {
@@ -127,14 +199,23 @@ export default function Auth() {
 
     try {
       if (isLogin) {
-        // First step: validate credentials
-        const { error } = await signIn(email, password);
+        // For login, validate credentials and automatically send OTP
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        
         if (error) throw error;
         
-        // After successful login, send OTP
+        // If credentials are valid, sign out immediately and send OTP automatically
+        await supabase.auth.signOut();
+        
+        // Automatically send OTP and show OTP input
         setLoginStep('otp');
         setLoading(false);
-        handleSendOtp();
+        
+        // Auto-send OTP
+        await handleSendOtp();
         return;
       } else {
         if (!fullName.trim()) {
@@ -290,24 +371,21 @@ export default function Auth() {
               ) : (
                 <div className="space-y-4">
                   <div className="text-center space-y-2">
-                    <h3 className="text-lg font-semibold">Verify Your Identity</h3>
+                    <h3 className="text-lg font-semibold">Enter Verification Code</h3>
                     <p className="text-sm text-muted-foreground">
-                      We've sent a verification code to your registered phone number
+                      Enter the 6-digit code sent to {userPhone || 'your phone'}
                     </p>
                   </div>
                   
-                  {!otpSent ? (
-                    <Button 
-                      onClick={handleSendOtp} 
-                      disabled={otpLoading}
-                      className="w-full"
-                    >
-                      {otpLoading ? 'Sending OTP...' : 'Send Verification Code'}
-                    </Button>
+                  {otpLoading ? (
+                    <div className="text-center py-4">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                      <p className="text-sm text-muted-foreground mt-2">Sending verification code...</p>
+                    </div>
                   ) : (
                     <div className="space-y-4">
                       <div className="space-y-2">
-                        <Label htmlFor="login-otp">Enter Verification Code</Label>
+                        <Label htmlFor="login-otp">Verification Code</Label>
                         <Input
                           id="login-otp"
                           type="text"
@@ -316,12 +394,13 @@ export default function Auth() {
                           onChange={(e) => setOtp(e.target.value)}
                           maxLength={6}
                           required
+                          className="text-center text-lg tracking-widest"
                         />
                       </div>
                       
                       <Button 
                         onClick={handleOtpLogin}
-                        disabled={loading || !otp}
+                        disabled={loading || !otp || otp.length !== 6}
                         className="w-full"
                       >
                         {loading ? 'Verifying...' : 'Verify & Login'}
@@ -346,6 +425,7 @@ export default function Auth() {
                       setLoginStep('credentials');
                       setOtpSent(false);
                       setOtp('');
+                      setUserPhone('');
                     }}
                     variant="outline"
                     className="w-full"

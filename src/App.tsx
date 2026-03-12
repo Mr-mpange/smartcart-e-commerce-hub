@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { PageVisibilityManager } from "@/components/PageVisibilityManager";
 import { useOrderNotifications } from "@/hooks/useOrderNotifications";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
@@ -47,6 +48,7 @@ const App = () => (
         }}
       >
         <AuthProvider>
+          <PageVisibilityManager />
           <NotificationProvider>
             <Routes>
               <Route path="/" element={<Index />} />

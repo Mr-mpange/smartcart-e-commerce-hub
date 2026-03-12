@@ -94,12 +94,34 @@ const AdminDashboard = () => {
         .from('profiles')
         .select('full_name')
         .eq('id', user.id)
-        .single();
+        .maybeSingle(); // Use maybeSingle instead of single to handle missing records
 
       if (error) throw error;
-      setAdminProfile(profile);
+      
+      // If no profile exists, create a default one
+      if (!profile) {
+        const { data: newProfile, error: createError } = await supabase
+          .from('profiles')
+          .insert([{ 
+            id: user.id, 
+            full_name: user.email?.split('@')[0] || 'Admin User' 
+          }])
+          .select('full_name')
+          .single();
+          
+        if (createError) {
+          console.error('Error creating admin profile:', createError);
+          setAdminProfile({ full_name: 'Admin User' });
+        } else {
+          setAdminProfile(newProfile);
+        }
+      } else {
+        setAdminProfile(profile);
+      }
     } catch (error) {
       console.error('Error fetching admin profile:', error);
+      // Set a default profile to prevent UI issues
+      setAdminProfile({ full_name: 'Admin User' });
     }
   };
 
@@ -217,15 +239,17 @@ const AdminDashboard = () => {
         throw new Error('Password must be at least 6 characters long');
       }
       
-      // Create actual user account using Supabase Auth Admin API
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      // Store current admin session
+      const { data: { session: adminSession } } = await supabase.auth.getSession();
+      
+      // Create user using admin API (doesn't affect current session)
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
         email: newVendorData.email,
         password: newVendorData.password,
-        options: {
-          data: {
-            full_name: newVendorData.fullName,
-          },
+        user_metadata: {
+          full_name: newVendorData.fullName,
         },
+        email_confirm: true, // Auto-confirm email for admin-created users
       });
 
       if (authError) {
@@ -260,6 +284,11 @@ const AdminDashboard = () => {
       if (vendorError) {
         console.error('Vendor profile creation error:', vendorError);
         throw new Error(`Failed to create vendor profile: ${vendorError.message}`);
+      }
+
+      // Restore admin session if it was lost
+      if (adminSession) {
+        await supabase.auth.setSession(adminSession);
       }
 
       toast.success(`Vendor "${newVendorData.businessName}" created successfully! Login: ${newVendorData.email}`);
