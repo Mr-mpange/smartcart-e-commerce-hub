@@ -29,11 +29,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         // Fetch user role after setting session
         if (session?.user) {
+          setLoading(true); // Set loading when fetching role
           setTimeout(() => {
             fetchUserRole(session.user.id);
           }, 0);
         } else {
           setUserRole(null);
+          setLoading(false);
         }
       }
     );
@@ -44,8 +46,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(session?.user ?? null);
       if (session?.user) {
         fetchUserRole(session.user.id);
+      } else {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
@@ -77,6 +80,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Error fetching user role:', error);
       setUserRole(null);
+    } finally {
+      // Only set loading to false after role is determined
+      setLoading(false);
     }
   };
 

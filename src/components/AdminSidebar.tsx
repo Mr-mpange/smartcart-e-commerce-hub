@@ -1,6 +1,7 @@
 import {
   Shield, Users, Store, Package, ShoppingCart, TrendingUp,
   ChevronLeft, Wallet, Truck, CreditCard, Send, BookOpen, BarChart3,
+  LogOut,
 } from "lucide-react";
 import {
   Sidebar,
@@ -17,6 +18,9 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 interface AdminSidebarProps {
   activeTab: string;
@@ -38,8 +42,20 @@ const menuItems = [
 
 export function AdminSidebar({ activeTab, onTabChange }: AdminSidebarProps) {
   const { state } = useSidebar();
+  const { signOut, user } = useAuth();
+  const navigate = useNavigate();
   const collapsed = state === "collapsed";
 
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      toast.success("Logged out successfully");
+      navigate("/");
+    } catch (error: any) {
+      toast.error("Failed to logout");
+    }
+  };
+  
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="p-4">
@@ -69,7 +85,16 @@ export function AdminSidebar({ activeTab, onTabChange }: AdminSidebarProps) {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="p-2">
+      <SidebarFooter className="p-2 space-y-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleLogout}
+          className="w-full justify-start"
+        >
+          <LogOut className="h-4 w-4" />
+          {!collapsed && <span className="ml-2">Logout</span>}
+        </Button>
         <SidebarTrigger />
       </SidebarFooter>
     </Sidebar>

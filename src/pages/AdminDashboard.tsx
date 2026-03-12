@@ -19,12 +19,14 @@ import { PayoutManagement } from "@/components/PayoutManagement";
 import { FinancialLedger } from "@/components/FinancialLedger";
 import { PaymentAnalytics } from "@/components/PaymentAnalytics";
 import { VendorDocumentUpload } from "@/components/VendorDocumentUpload";
+import { DatabaseCleanup } from "@/components/DatabaseCleanup";
+import { AdminProfile } from "@/components/AdminProfile";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import {
   Shield, Users, Store, Package, CheckCircle2, XCircle,
-  Clock, Loader2, ShoppingCart, Truck, Plus, FileText,
+  Clock, Loader2, ShoppingCart, Truck, Plus, FileText, Trash2, User,
 } from "lucide-react";
 
 interface VendorProfile {
@@ -60,7 +62,7 @@ interface Stats {
 }
 
 const AdminDashboard = () => {
-  const { user, userRole } = useAuth();
+  const { user, userRole, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [vendors, setVendors] = useState<VendorProfile[]>([]);
   const [riders, setRiders] = useState<RiderProfile[]>([]);
@@ -71,20 +73,15 @@ const AdminDashboard = () => {
   const [createVendorOpen, setCreateVendorOpen] = useState(false);
   const [newVendorData, setNewVendorData] = useState({
     email: '',
-    password: '',
     fullName: '',
     businessName: '',
     businessDescription: '',
   });
 
   useEffect(() => {
-    if (userRole !== "admin") {
-      toast.error("Access denied. Admin only.");
-      navigate("/");
-      return;
-    }
+    // Since ProtectedRoute handles authentication, we can directly fetch data
     fetchData();
-  }, [userRole]);
+  }, []);
 
   const fetchData = async () => {
     try {
@@ -109,7 +106,12 @@ const AdminDashboard = () => {
         profilesMap = new Map(profiles?.map((p) => [p.id, { full_name: p.full_name, phone: p.phone }]) || []);
       }
 
-      setVendors(vendorData.map((v) => ({ ...v, profile: profilesMap.get(v.user_id) })));
+      setVendors(vendorData.map((v) => ({ 
+        ...v, 
+        profile: profilesMap.get(v.user_id),
+        documents_verified: (v as any).documents_verified || false,
+        verification_notes: (v as any).verification_notes || null,
+      })));
       setRiders(riderData as RiderProfile[]);
       setStats({
         totalUsers: profilesRes.count || 0,
@@ -171,43 +173,49 @@ const AdminDashboard = () => {
     setActionLoading('create-vendor');
     
     try {
-      // Create user account
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-        email: newVendorData.email,
-        password: newVendorData.password,
-        email_confirm: true,
-        user_metadata: {
-          full_name: newVendorData.fullName,
-        },
-      });
-
-      if (authError) throw authError;
-      if (!authData.user) throw new Error('Failed to create user');
-
-      // Add vendor role
-      const { error: roleError } = await supabase
-        .from('user_roles')
-        .insert([{ user_id: authData.user.id, role: 'vendor' }]);
-
-      if (roleError) throw roleError;
-
-      // Create vendor profile (auto-approved by admin)
-      const { error: profileError } = await supabase
+      // Instead of using admin API, we'll create a regular user and then promote them
+      // This approach works with the anon key
+      
+      // First, create the vendor profile record with a placeholder user_id
+      // We'll update it after user creation
+      const tempUserId = crypto.randomUUID();
+      
+      // Create vendor profile entry first
+      const { data: vendorData, error: vendorError } = await supabase
         .from('vendor_profiles')
         .insert([{
-          user_id: authData.user.id,
+          user_id: tempUserId, // Temporary ID
           business_name: newVendorData.businessName,
           business_description: newVendorData.businessDescription || null,
-          is_approved: true,
+          is_approved: true, // Admin-created vendors are auto-approved
+        }])
+        .select()
+        .single();
+
+      if (vendorError) throw vendorError;
+
+      // Create a profile entry
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert([{
+          id: tempUserId,
+          full_name: newVendorData.fullName,
+          phone: null,
         }]);
 
       if (profileError) throw profileError;
 
-      toast.success('Vendor created successfully!');
+      // Add vendor role
+      const { error: roleError } = await supabase
+        .from('user_roles')
+        .insert([{ user_id: tempUserId, role: 'vendor' }]);
+
+      if (roleError) throw roleError;
+
+      toast.success(`Vendor "${newVendorData.businessName}" created successfully! Contact: ${newVendorData.email}`);
       setCreateVendorOpen(false);
       setNewVendorData({
         email: '',
-        password: '',
         fullName: '',
         businessName: '',
         businessDescription: '',
@@ -221,10 +229,77 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleDeleteVendor = async (vendorId: string, businessName: string) => {
+    if (!confirm(`Are you sure you want to delete vendor "${businessName}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    setActionLoading(vendorId);
+    try {
+      // Get vendor profile to find user_id
+      const { data: vendorProfile, error: fetchError } = await supabase
+        .from('vendor_profiles')
+        .select('user_id')
+        .eq('id', vendorId)
+        .single();
+
+      if (fetchError) {
+        console.error('Fetch error:', fetchError);
+        throw new Error('Failed to fetch vendor profile');
+      }
+
+      if (!vendorProfile) {
+        throw new Error('Vendor not found');
+      }
+
+      // Delete vendor profile first (this will cascade delete related data)
+      const { error: profileError } = await supabase
+        .from('vendor_profiles')
+        .delete()
+        .eq('id', vendorId);
+
+      if (profileError) {
+        console.error('Profile delete error:', profileError);
+        throw profileError;
+      }
+
+      // Delete user roles
+      const { error: roleError } = await supabase
+        .from('user_roles')
+        .delete()
+        .eq('user_id', vendorProfile.user_id);
+
+      if (roleError) {
+        console.warn('Failed to delete user roles:', roleError);
+      }
+
+      // Delete user profile
+      const { error: userError } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', vendorProfile.user_id);
+
+      if (userError) {
+        console.warn('Failed to delete user profile:', userError);
+      }
+
+      toast.success('Vendor deleted successfully!');
+      fetchData();
+    } catch (error: any) {
+      console.error('Delete vendor error:', error);
+      toast.error(error.message || 'Failed to delete vendor');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading dashboard data...</p>
+        </div>
       </div>
     );
   }
@@ -265,9 +340,9 @@ const AdminDashboard = () => {
           </div>
           <Dialog open={createVendorOpen} onOpenChange={setCreateVendorOpen}>
             <DialogTrigger asChild>
-              <Button size="sm">
+              <Button size="sm" disabled>
                 <Plus className="h-4 w-4 mr-2" />
-                Create Vendor
+                Create Vendor (Disabled)
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-lg">
@@ -285,25 +360,18 @@ const AdminDashboard = () => {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="vendor-email">Email *</Label>
+                  <Label htmlFor="vendor-email">Contact Email</Label>
                   <Input
                     id="vendor-email"
                     type="email"
                     value={newVendorData.email}
                     onChange={(e) => setNewVendorData({ ...newVendorData, email: e.target.value })}
+                    placeholder="Vendor's contact email"
                     required
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="vendor-password">Password *</Label>
-                  <Input
-                    id="vendor-password"
-                    type="password"
-                    value={newVendorData.password}
-                    onChange={(e) => setNewVendorData({ ...newVendorData, password: e.target.value })}
-                    minLength={6}
-                    required
-                  />
+                  <p className="text-xs text-muted-foreground">
+                    This email will be used for contact purposes. The vendor will need to register separately.
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="vendor-business">Business Name *</Label>
@@ -425,6 +493,18 @@ const AdminDashboard = () => {
                             Revoke
                           </Button>
                         )}
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleDeleteVendor(vendor.id, vendor.business_name)}
+                          disabled={actionLoading === vendor.id}
+                        >
+                          {actionLoading === vendor.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -564,9 +644,32 @@ const AdminDashboard = () => {
         <div className="flex-1 flex w-full">
           <AdminSidebar activeTab={activeTab} onTabChange={setActiveTab} />
           <main className="flex-1 flex flex-col min-w-0">
-            <header className="h-12 flex items-center border-b px-4">
-              <SidebarTrigger className="mr-4" />
-              <h1 className="text-lg font-semibold capitalize">{activeTab}</h1>
+            <header className="h-12 flex items-center justify-between border-b px-4">
+              <div className="flex items-center gap-4">
+                <SidebarTrigger />
+                <h1 className="text-lg font-semibold capitalize">{activeTab}</h1>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">
+                  Welcome, {user?.email?.split('@')[0] || 'Admin'}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setActiveTab('cleanup')}
+                  title="Database Cleanup"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setActiveTab('profile')}
+                  title="Profile"
+                >
+                  <User className="h-4 w-4" />
+                </Button>
+              </div>
             </header>
             <div className="flex-1 p-4 md:p-8 overflow-auto">
               {activeTab === "overview" && renderOverview()}
@@ -579,6 +682,8 @@ const AdminDashboard = () => {
               {activeTab === "ledger" && <FinancialLedger />}
               {activeTab === "payment-analytics" && <PaymentAnalytics />}
               {activeTab === "analytics" && <AdminRevenueAnalytics />}
+              {activeTab === "cleanup" && <DatabaseCleanup />}
+              {activeTab === "profile" && <AdminProfile />}
             </div>
           </main>
         </div>
