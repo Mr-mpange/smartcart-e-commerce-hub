@@ -29,7 +29,37 @@ interface CartItem {
 const Checkout = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [isLoading, setIsLoading] = useState(false);
+  // Function to detect mobile money provider based on phone number
+  const detectMobileMoneyProvider = (phone: string) => {
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+    
+    // Tanzanian mobile money provider detection
+    if (cleanPhone.startsWith('255')) {
+      const number = cleanPhone.substring(3);
+      if (number.startsWith('74') || number.startsWith('75') || number.startsWith('76')) {
+        return 'Vodacom M-Pesa';
+      } else if (number.startsWith('71') || number.startsWith('65') || number.startsWith('67') || number.startsWith('68')) {
+        return 'Airtel Money';
+      } else if (number.startsWith('77') || number.startsWith('78')) {
+        return 'Tigo Pesa';
+      } else if (number.startsWith('62') || number.startsWith('69')) {
+        return 'Halotel';
+      }
+    } else if (cleanPhone.startsWith('0')) {
+      const number = cleanPhone.substring(1);
+      if (number.startsWith('74') || number.startsWith('75') || number.startsWith('76')) {
+        return 'Vodacom M-Pesa';
+      } else if (number.startsWith('71') || number.startsWith('65') || number.startsWith('67') || number.startsWith('68')) {
+        return 'Airtel Money';
+      } else if (number.startsWith('77') || number.startsWith('78')) {
+        return 'Tigo Pesa';
+      } else if (number.startsWith('62') || number.startsWith('69')) {
+        return 'Halotel';
+      }
+    }
+    
+    return 'Mobile Money'; // Default fallback
+  };
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [loadingCart, setLoadingCart] = useState(true);
@@ -230,8 +260,16 @@ const Checkout = () => {
         if (data?.success) {
           setPaymentError(null);
           await supabase.from('cart_items').delete().eq('user_id', user?.id);
-          toast.info("A payment request has been sent to your phone. Please enter your M-Pesa PIN to confirm.", { duration: 10000 });
-          navigate(`/payment-success?order_id=${order.id}&method=mobile_money`);
+          
+          const provider = detectMobileMoneyProvider(formData.phone);
+          const providerPin = provider.includes('M-Pesa') ? 'M-Pesa PIN' : 
+                           provider.includes('Airtel') ? 'Airtel Money PIN' :
+                           provider.includes('Tigo') ? 'Tigo Pesa PIN' :
+                           provider.includes('Halotel') ? 'Halotel PIN' :
+                           'mobile money PIN';
+          
+          toast.info(`A payment request has been sent to your phone. Please enter your ${providerPin} to confirm.`, { duration: 10000 });
+          navigate(`/payment-success?order_id=${order.id}&method=mobile_money&provider=${encodeURIComponent(provider)}`);
         } else {
           setPaymentError('Payment could not be initiated. Please try again or use Cash on Delivery.');
           setIsLoading(false);
@@ -378,7 +416,7 @@ const Checkout = () => {
                             <Smartphone className="h-5 w-5 text-primary" />
                             <div>
                               <p className="font-medium">Mobile Money</p>
-                              <p className="text-xs text-muted-foreground">M-Pesa, TigoPesa, Airtel</p>
+                              <p className="text-xs text-muted-foreground">All mobile money providers</p>
                             </div>
                           </Label>
                         </div>
@@ -489,7 +527,7 @@ const Checkout = () => {
                       <span>Secure payment via Snippe</span>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Supports M-Pesa, TigoPesa, and Airtel Money
+                      Supports all major mobile money providers
                     </p>
                   </div>
                 </CardContent>

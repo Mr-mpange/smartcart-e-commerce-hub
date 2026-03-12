@@ -15,7 +15,7 @@ const features = [
   {
     icon: CreditCard,
     title: "Easy Payments",
-    description: "Multiple payment options including M-Pesa, cards, and cash on delivery."
+    description: "Multiple payment options including mobile money, cards, and cash on delivery."
   },
   {
     icon: Headphones,

@@ -23,6 +23,7 @@ const PaymentSuccess = () => {
   const [searchParams] = useSearchParams();
   const orderId = searchParams.get("order_id");
   const paymentMethod = searchParams.get("method");
+  const provider = searchParams.get("provider") || 'Mobile Money';
   const [orderStatus, setOrderStatus] = useState<string>("pending");
 
   useEffect(() => {
@@ -101,7 +102,7 @@ const PaymentSuccess = () => {
                 </CardTitle>
                 <CardDescription className="text-base md:text-lg">
                   {isPending && isMobileMoney
-                    ? "A payment push has been sent to your phone. Enter your M-Pesa/TigoPesa/Airtel PIN to authorize."
+                    ? `A payment push has been sent to your phone. Enter your ${provider.includes('M-Pesa') ? 'M-Pesa' : provider.includes('Airtel') ? 'Airtel Money' : provider.includes('Tigo') ? 'Tigo Pesa' : provider.includes('Halotel') ? 'Halotel' : 'mobile money'} PIN to authorize.`
                     : isPending
                     ? "Waiting for payment confirmation..."
                     : isFailed

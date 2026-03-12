@@ -323,7 +323,7 @@ const Wallet = () => {
                           onChange={(e) => setWithdrawPhone(e.target.value)}
                         />
                         <p className="text-xs text-muted-foreground">
-                          Supports M-Pesa, TigoPesa, and Airtel Money
+                          Supports mobile money providers in Tanzania
                         </p>
                         <Button className="w-full" onClick={handleWithdraw} disabled={withdrawLoading}>
                           {withdrawLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowUpRight className="mr-2 h-4 w-4" />}
