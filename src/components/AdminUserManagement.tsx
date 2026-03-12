@@ -12,7 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { 
   Users, Plus, Edit, Trash2, Loader2, AlertTriangle, 
-  Search, RefreshCw, Eye, EyeOff 
+  Search, RefreshCw
 } from 'lucide-react';
 
 type UserRole = 'customer' | 'vendor' | 'delivery_rider' | 'admin';
@@ -42,7 +42,25 @@ export function AdminUserManagement() {
 
   useEffect(() => {
     fetchUsers();
+    checkAdminPermissions();
   }, []);
+
+  const checkAdminPermissions = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      console.log('Current user:', user?.id);
+      
+      if (user) {
+        const { data: roles } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', user.id);
+        console.log('User roles:', roles);
+      }
+    } catch (error) {
+      console.error('Error checking admin permissions:', error);
+    }
+  };
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -138,6 +156,8 @@ export function AdminUserManagement() {
     setActionLoading('edit-user');
 
     try {
+      console.log('Updating user:', selectedUser.id, newUserData);
+      
       // Update profile
       const { error: profileError } = await supabase
         .from('profiles')
@@ -147,22 +167,35 @@ export function AdminUserManagement() {
         })
         .eq('id', selectedUser.id);
 
-      if (profileError) throw profileError;
+      if (profileError) {
+        console.error('Profile update error:', profileError);
+        throw profileError;
+      }
 
       // Update role if changed
       if (newUserData.role !== selectedUser.roles[0]) {
+        console.log('Updating role from', selectedUser.roles[0], 'to', newUserData.role);
+        
         // Delete existing roles
-        await supabase
+        const { error: deleteRoleError } = await supabase
           .from('user_roles')
           .delete()
           .eq('user_id', selectedUser.id);
+
+        if (deleteRoleError) {
+          console.error('Delete role error:', deleteRoleError);
+          throw deleteRoleError;
+        }
 
         // Add new role
         const { error: roleError } = await supabase
           .from('user_roles')
           .insert([{ user_id: selectedUser.id, role: newUserData.role }]);
 
-        if (roleError) throw roleError;
+        if (roleError) {
+          console.error('Insert role error:', roleError);
+          throw roleError;
+        }
       }
 
       toast.success('User updated successfully!');
@@ -185,31 +218,71 @@ export function AdminUserManagement() {
     setActionLoading(userId);
 
     try {
+      console.log('Deleting user:', userId, userName);
+      
       // Delete user roles first
-      await supabase
+      const { error: roleError } = await supabase
         .from('user_roles')
         .delete()
         .eq('user_id', userId);
 
+      if (roleError) {
+        console.error('Delete roles error:', roleError);
+        // Don't throw here, continue with deletion
+      }
+
       // Delete vendor profile if exists
-      await supabase
+      const { error: vendorError } = await supabase
         .from('vendor_profiles')
         .delete()
         .eq('user_id', userId);
 
+      if (vendorError) {
+        console.error('Delete vendor profile error:', vendorError);
+        // Don't throw here, continue with deletion
+      }
+
       // Delete rider profile if exists
-      await supabase
+      const { error: riderError } = await supabase
         .from('rider_profiles')
         .delete()
         .eq('user_id', userId);
 
-      // Delete user profile
+      if (riderError) {
+        console.error('Delete rider profile error:', riderError);
+        // Don't throw here, continue with deletion
+      }
+
+      // Delete cart items
+      const { error: cartError } = await supabase
+        .from('cart_items')
+        .delete()
+        .eq('user_id', userId);
+
+      if (cartError) {
+        console.error('Delete cart items error:', cartError);
+      }
+
+      // Delete wishlist items
+      const { error: wishlistError } = await supabase
+        .from('wishlists')
+        .delete()
+        .eq('user_id', userId);
+
+      if (wishlistError) {
+        console.error('Delete wishlist error:', wishlistError);
+      }
+
+      // Delete user profile (main record)
       const { error: profileError } = await supabase
         .from('profiles')
         .delete()
         .eq('id', userId);
 
-      if (profileError) throw profileError;
+      if (profileError) {
+        console.error('Delete profile error:', profileError);
+        throw profileError;
+      }
 
       toast.success('User deleted successfully!');
       fetchUsers();
