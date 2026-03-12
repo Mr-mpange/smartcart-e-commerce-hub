@@ -104,6 +104,20 @@ const AdminDashboard = () => {
 
   const fetchData = async () => {
     try {
+      console.log('Fetching admin data...');
+      
+      // Check current user and roles
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      console.log('Current user:', currentUser?.id);
+      
+      if (currentUser) {
+        const { data: userRoles } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', currentUser.id);
+        console.log('Current user roles:', userRoles);
+      }
+
       const [vendorsRes, ridersRes, profilesRes, productsRes, ordersRes] = await Promise.all([
         supabase.from("vendor_profiles").select("*").order("created_at", { ascending: false }),
         supabase.from("rider_profiles").select("*").order("created_at", { ascending: false }),
@@ -111,6 +125,10 @@ const AdminDashboard = () => {
         supabase.from("products").select("id", { count: "exact", head: true }),
         supabase.from("orders").select("id", { count: "exact", head: true }),
       ]);
+
+      console.log('Vendors response:', vendorsRes);
+      console.log('Vendors data:', vendorsRes.data);
+      console.log('Vendors error:', vendorsRes.error);
 
       const vendorData = vendorsRes.data || [];
       const riderData = ridersRes.data || [];
@@ -192,44 +210,30 @@ const AdminDashboard = () => {
     setActionLoading('create-vendor');
     
     try {
-      // Instead of using admin API, we'll create a regular user and then promote them
-      // This approach works with the anon key
+      console.log('Creating vendor with data:', newVendorData);
       
-      // First, create the vendor profile record with a placeholder user_id
-      // We'll update it after user creation
-      const tempUserId = crypto.randomUUID();
+      // Get current admin user
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) {
+        throw new Error('Admin user not found');
+      }
       
-      // Create vendor profile entry first
+      // Create vendor profile using admin's user_id but mark it as admin-created
       const { data: vendorData, error: vendorError } = await supabase
         .from('vendor_profiles')
         .insert([{
-          user_id: tempUserId, // Temporary ID
+          user_id: currentUser.id, // Use admin's user_id
           business_name: newVendorData.businessName,
-          business_description: newVendorData.businessDescription || null,
+          business_description: `${newVendorData.businessDescription || ''}\n[ADMIN_CREATED - Contact: ${newVendorData.email} - Owner: ${newVendorData.fullName}]`,
           is_approved: true, // Admin-created vendors are auto-approved
         }])
         .select()
         .single();
 
-      if (vendorError) throw vendorError;
-
-      // Create a profile entry
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert([{
-          id: tempUserId,
-          full_name: newVendorData.fullName,
-          phone: null,
-        }]);
-
-      if (profileError) throw profileError;
-
-      // Add vendor role
-      const { error: roleError } = await supabase
-        .from('user_roles')
-        .insert([{ user_id: tempUserId, role: 'vendor' }]);
-
-      if (roleError) throw roleError;
+      if (vendorError) {
+        console.error('Vendor creation error:', vendorError);
+        throw vendorError;
+      }
 
       toast.success(`Vendor "${newVendorData.businessName}" created successfully! Contact: ${newVendorData.email}`);
       setCreateVendorOpen(false);
@@ -255,10 +259,12 @@ const AdminDashboard = () => {
 
     setActionLoading(vendorId);
     try {
-      // Get vendor profile to find user_id
+      console.log('Deleting vendor:', vendorId, businessName);
+      
+      // Get vendor profile to check if it's admin-created
       const { data: vendorProfile, error: fetchError } = await supabase
         .from('vendor_profiles')
-        .select('user_id')
+        .select('user_id, business_description')
         .eq('id', vendorId)
         .single();
 
@@ -271,6 +277,8 @@ const AdminDashboard = () => {
         throw new Error('Vendor not found');
       }
 
+      const isAdminCreated = vendorProfile.business_description?.includes('[ADMIN_CREATED');
+
       // Delete vendor profile first (this will cascade delete related data)
       const { error: profileError } = await supabase
         .from('vendor_profiles')
@@ -282,24 +290,27 @@ const AdminDashboard = () => {
         throw profileError;
       }
 
-      // Delete user roles
-      const { error: roleError } = await supabase
-        .from('user_roles')
-        .delete()
-        .eq('user_id', vendorProfile.user_id);
+      // Only delete user-related data if this is not an admin-created vendor
+      if (vendorProfile.user_id && !isAdminCreated) {
+        // Delete user roles
+        const { error: roleError } = await supabase
+          .from('user_roles')
+          .delete()
+          .eq('user_id', vendorProfile.user_id);
 
-      if (roleError) {
-        console.warn('Failed to delete user roles:', roleError);
-      }
+        if (roleError) {
+          console.warn('Failed to delete user roles:', roleError);
+        }
 
-      // Delete user profile
-      const { error: userError } = await supabase
-        .from('profiles')
-        .delete()
-        .eq('id', vendorProfile.user_id);
+        // Delete user profile
+        const { error: userError } = await supabase
+          .from('profiles')
+          .delete()
+          .eq('id', vendorProfile.user_id);
 
-      if (userError) {
-        console.warn('Failed to delete user profile:', userError);
+        if (userError) {
+          console.warn('Failed to delete user profile:', userError);
+        }
       }
 
       toast.success('Vendor deleted successfully!');
@@ -359,9 +370,9 @@ const AdminDashboard = () => {
           </div>
           <Dialog open={createVendorOpen} onOpenChange={setCreateVendorOpen}>
             <DialogTrigger asChild>
-              <Button size="sm" disabled>
+              <Button size="sm">
                 <Plus className="h-4 w-4 mr-2" />
-                Create Vendor (Disabled)
+                Create Vendor
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-lg">
@@ -450,7 +461,10 @@ const AdminDashboard = () => {
                       </div>
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
-                      {vendor.profile?.full_name || "Unknown"}
+                      {vendor.business_description?.includes('[ADMIN_CREATED') 
+                        ? 'Admin Created' 
+                        : (vendor.profile?.full_name || "Unknown")
+                      }
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
                       {new Date(vendor.created_at).toLocaleDateString()}

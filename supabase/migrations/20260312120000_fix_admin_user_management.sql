@@ -1,8 +1,11 @@
 -- Fix admin user management permissions
 -- Add policy to allow admins to manage all user profiles
 
--- Drop existing policies for profiles to recreate them
+-- Drop existing policies for profiles to recreate them with proper admin access
 DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
+DROP POLICY IF EXISTS "Admins can manage all profiles" ON public.profiles;
+DROP POLICY IF EXISTS "Admins can create profiles" ON public.profiles;
+DROP POLICY IF EXISTS "Admins can delete profiles" ON public.profiles;
 
 -- Recreate policies with admin access
 CREATE POLICY "Users can update own profile"

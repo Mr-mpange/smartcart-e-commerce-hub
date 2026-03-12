@@ -39,8 +39,20 @@ const Wishlist = () => {
   }, [user]);
 
   const fetchVendors = async () => {
-    const { data } = await supabase.from('vendor_profiles').select('user_id, business_name').eq('is_approved', true);
-    setVendorMap(new Map(data?.map(v => [v.user_id, v.business_name]) || []));
+    console.log('Fetching vendors for wishlist...');
+    // Fetch all vendors, not just approved ones, so wishlist items show vendor names
+    const { data, error } = await supabase
+      .from('vendor_profiles')
+      .select('user_id, business_name, is_approved');
+    
+    console.log('Wishlist vendors:', data, error);
+    // Create map with all vendors, but indicate approval status
+    const vendorMap = new Map();
+    data?.forEach(v => {
+      const name = v.is_approved ? v.business_name : `${v.business_name} (Pending)`;
+      vendorMap.set(v.user_id, name);
+    });
+    setVendorMap(vendorMap);
   };
 
   const fetchWishlist = async () => {
