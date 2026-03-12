@@ -82,7 +82,8 @@ const Products = () => {
       if (approvedIds.length > 0) {
         query = query.in('vendor_id', approvedIds);
       } else {
-        query = query.in('vendor_id', ['none']);
+        // If no approved vendors, return empty result set
+        query = query.eq('vendor_id', '00000000-0000-0000-0000-000000000000');
       }
 
       const { data, error } = await query;

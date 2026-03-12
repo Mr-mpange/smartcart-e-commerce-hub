@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -18,6 +17,7 @@ import { PaymentMonitoring } from "@/components/PaymentMonitoring";
 import { PayoutManagement } from "@/components/PayoutManagement";
 import { FinancialLedger } from "@/components/FinancialLedger";
 import { PaymentAnalytics } from "@/components/PaymentAnalytics";
+import { AdminUserManagement } from "@/components/AdminUserManagement";
 import { VendorDocumentUpload } from "@/components/VendorDocumentUpload";
 import { DatabaseCleanup } from "@/components/DatabaseCleanup";
 import { AdminProfile } from "@/components/AdminProfile";
@@ -25,7 +25,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import {
-  Shield, Users, Store, Package, CheckCircle2, XCircle,
+  Users, Store, Package, CheckCircle2, XCircle,
   Clock, Loader2, ShoppingCart, Truck, Plus, FileText, Trash2, User,
 } from "lucide-react";
 
@@ -62,8 +62,7 @@ interface Stats {
 }
 
 const AdminDashboard = () => {
-  const { user, userRole, loading: authLoading } = useAuth();
-  const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
   const [vendors, setVendors] = useState<VendorProfile[]>([]);
   const [riders, setRiders] = useState<RiderProfile[]>([]);
   const [stats, setStats] = useState<Stats>({ totalUsers: 0, totalVendors: 0, totalProducts: 0, totalOrders: 0, totalRiders: 0 });
@@ -78,10 +77,30 @@ const AdminDashboard = () => {
     businessDescription: '',
   });
 
+  const [adminProfile, setAdminProfile] = useState<{ full_name: string } | null>(null);
+
   useEffect(() => {
     // Since ProtectedRoute handles authentication, we can directly fetch data
     fetchData();
+    fetchAdminProfile();
   }, []);
+
+  const fetchAdminProfile = async () => {
+    if (!user?.id) return;
+    
+    try {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .single();
+
+      if (error) throw error;
+      setAdminProfile(profile);
+    } catch (error) {
+      console.error('Error fetching admin profile:', error);
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -651,16 +670,8 @@ const AdminDashboard = () => {
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">
-                  Welcome, {user?.email?.split('@')[0] || 'Admin'}
+                  Welcome, {adminProfile?.full_name || user?.email?.split('@')[0] || 'Admin'}
                 </span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setActiveTab('cleanup')}
-                  title="Database Cleanup"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -673,6 +684,7 @@ const AdminDashboard = () => {
             </header>
             <div className="flex-1 p-4 md:p-8 overflow-auto">
               {activeTab === "overview" && renderOverview()}
+              {activeTab === "users" && <AdminUserManagement />}
               {activeTab === "orders" && <AdminOrderManagement />}
               {activeTab === "vendors" && renderVendors()}
               {activeTab === "riders" && renderRiders()}

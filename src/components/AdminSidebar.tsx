@@ -29,6 +29,7 @@ interface AdminSidebarProps {
 
 const menuItems = [
   { id: "overview", label: "Overview", icon: TrendingUp },
+  { id: "users", label: "Users", icon: Users },
   { id: "orders", label: "Orders", icon: ShoppingCart },
   { id: "vendors", label: "Vendors", icon: Store },
   { id: "riders", label: "Riders", icon: Truck },

@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Trash2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Trash2, AlertTriangle, RefreshCw, Loader2 } from 'lucide-react';
 
 export function DatabaseCleanup() {
   const [loading, setLoading] = useState(false);
@@ -97,6 +97,96 @@ export function DatabaseCleanup() {
     }
   };
 
+  const cleanupAdminRoles = async () => {
+    if (!confirm('Remove duplicate customer roles from admin users? This cannot be undone.')) return;
+
+    setLoading(true);
+    try {
+      // Find users who have both admin and customer roles
+      const { data: adminUsers, error: adminError } = await supabase
+        .from('user_roles')
+        .select('user_id')
+        .eq('role', 'admin');
+
+      if (adminError) throw adminError;
+
+      if (!adminUsers || adminUsers.length === 0) {
+        toast.info('No admin users found');
+        return;
+      }
+
+      const adminUserIds = adminUsers.map(u => u.user_id);
+
+      // Delete customer roles for admin users
+      const { error: deleteError } = await supabase
+        .from('user_roles')
+        .delete()
+        .eq('role', 'customer')
+        .in('user_id', adminUserIds);
+
+      if (deleteError) throw deleteError;
+
+      toast.success('Admin roles cleaned up! Duplicate customer roles removed.');
+    } catch (error: any) {
+      console.error('Admin role cleanup error:', error);
+      toast.error('Failed to cleanup admin roles');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteSpecificVendor = async (vendorId: string) => {
+    if (!confirm(`Delete vendor ${vendorId}? This cannot be undone.`)) return;
+
+    setLoading(true);
+    try {
+      // Get vendor profile to find user_id
+      const { data: vendorProfile, error: fetchError } = await supabase
+        .from('vendor_profiles')
+        .select('user_id, business_name')
+        .eq('id', vendorId)
+        .single();
+
+      if (fetchError) {
+        console.error('Fetch error:', fetchError);
+        throw new Error('Vendor not found');
+      }
+
+      if (!vendorProfile) {
+        throw new Error('Vendor not found');
+      }
+
+      // Delete vendor profile
+      const { error: profileError } = await supabase
+        .from('vendor_profiles')
+        .delete()
+        .eq('id', vendorId);
+
+      if (profileError) throw profileError;
+
+      // Delete user roles if user_id exists
+      if (vendorProfile.user_id) {
+        await supabase
+          .from('user_roles')
+          .delete()
+          .eq('user_id', vendorProfile.user_id);
+
+        // Delete user profile
+        await supabase
+          .from('profiles')
+          .delete()
+          .eq('id', vendorProfile.user_id);
+      }
+
+      toast.success(`Vendor ${vendorProfile.business_name || vendorId} deleted successfully!`);
+    } catch (error: any) {
+      console.error('Delete vendor error:', error);
+      toast.error(error.message || 'Failed to delete vendor');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Card className="w-full max-w-4xl">
       <CardHeader>
@@ -113,18 +203,77 @@ export function DatabaseCleanup() {
           </AlertDescription>
         </Alert>
 
-        <div className="flex gap-2">
-          <Button onClick={findDummyData} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Find Dummy Data
-          </Button>
-          {dummyVendors.length > 0 && (
-            <Button variant="destructive" onClick={cleanupAllDummy} disabled={loading}>
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete All ({dummyVendors.length})
+        <div className="space-y-4">
+          <Alert>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              This tool helps clean up user roles and remove unwanted data. Use with caution as deletions cannot be undone.
+            </AlertDescription>
+          </Alert>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">Admin Role Cleanup</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Remove duplicate 'customer' role from admin users
+                </p>
+                <Button 
+                  onClick={cleanupAdminRoles} 
+                  disabled={loading}
+                  size="sm"
+                  className="w-full"
+                >
+                  {loading ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                  )}
+                  Clean Admin Roles
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">Delete Specific Vendor</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Delete vendor: bf6b7b46-70f6-4fe3-9ddd-99fb88936c8b
+                </p>
+                <Button 
+                  onClick={() => deleteSpecificVendor('bf6b7b46-70f6-4fe3-9ddd-99fb88936c8b')} 
+                  disabled={loading}
+                  variant="destructive"
+                  size="sm"
+                  className="w-full"
+                >
+                  {loading ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4 mr-2" />
+                  )}
+                  Delete Vendor
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="flex gap-2">
+            <Button onClick={findDummyData} disabled={loading}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+              Find Dummy Data
             </Button>
-          )}
-        </div>
+            {dummyVendors.length > 0 && (
+              <Button variant="destructive" onClick={cleanupAllDummy} disabled={loading}>
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete All ({dummyVendors.length})
+              </Button>
+            )}
+          </div>
 
         {dummyVendors.length > 0 && (
           <div className="space-y-2">
@@ -156,6 +305,7 @@ export function DatabaseCleanup() {
             No dummy vendors found. Click "Find Dummy Data" to search.
           </p>
         )}
+        </div>
       </CardContent>
     </Card>
   );
