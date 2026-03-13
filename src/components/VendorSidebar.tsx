@@ -1,6 +1,6 @@
 import {
   Store, Package, ShoppingCart, TrendingUp, Settings, User,
-  LogOut, BarChart3, FileText, Wallet, Bell
+  LogOut, BarChart3, FileText, Wallet, Bell, DollarSign
 } from "lucide-react";
 import {
   Sidebar,
@@ -32,6 +32,7 @@ const menuItems = [
   { id: "orders", label: "Orders", icon: ShoppingCart },
   { id: "analytics", label: "Analytics", icon: BarChart3 },
   { id: "documents", label: "Documents", icon: FileText },
+  { id: "payments", label: "Payments", icon: DollarSign },
   { id: "wallet", label: "Wallet", icon: Wallet },
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "settings", label: "Settings", icon: Settings },

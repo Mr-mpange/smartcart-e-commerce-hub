@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Navbar } from "@/components/Navbar";
-import { Footer } from "@/components/Footer";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { RiderSidebar } from "@/components/RiderSidebar";
+import { PaymentMonitoring } from "@/components/PaymentMonitoring";
 import {
   Loader2, Truck, Package, CheckCircle2, Clock, MapPin, Phone, User, Navigation,
 } from "lucide-react";
@@ -50,7 +50,7 @@ export default function RiderDashboard() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState("active");
+  const [activeTab, setActiveTab] = useState("overview");
 
   useEffect(() => {
     if (!authLoading && (!user || userRole !== "delivery_rider")) {
@@ -186,10 +186,10 @@ export default function RiderDashboard() {
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen bg-background">
-        <Navbar />
-        <div className="container mx-auto px-4 py-8 flex justify-center">
-          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading deliveries...</p>
         </div>
       </div>
     );
@@ -288,80 +288,135 @@ export default function RiderDashboard() {
     </Card>
   );
 
-  return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <Navbar />
-      <main className="flex-1 container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto space-y-6">
-          <div className="flex items-center gap-3">
-            <Truck className="h-8 w-8 text-primary" />
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold">My Deliveries</h1>
-              <p className="text-sm text-muted-foreground">Manage your assigned delivery orders</p>
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case 'overview':
+        return (
+          <div className="space-y-6">
+            {/* Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                { label: "Total Assigned", value: stats.total, icon: Package },
+                { label: "Active Now", value: stats.active, icon: Truck },
+                { label: "Delivered", value: stats.delivered, icon: CheckCircle2 },
+                { label: "Today", value: stats.today, icon: Clock },
+              ].map(({ label, value, icon: Icon }) => (
+                <Card key={label}>
+                  <CardContent className="p-4 flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-primary/10">
+                      <Icon className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{value}</p>
+                      <p className="text-xs text-muted-foreground">{label}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
-          </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {[
-              { label: "Total Assigned", value: stats.total, icon: Package },
-              { label: "Active Now", value: stats.active, icon: Truck },
-              { label: "Delivered", value: stats.delivered, icon: CheckCircle2 },
-              { label: "Today", value: stats.today, icon: Clock },
-            ].map(({ label, value, icon: Icon }) => (
-              <Card key={label}>
-                <CardContent className="p-4 flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-primary/10">
-                    <Icon className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold">{value}</p>
-                    <p className="text-xs text-muted-foreground">{label}</p>
-                  </div>
+            {orders.length === 0 ? (
+              <Card>
+                <CardContent className="py-16 text-center">
+                  <Truck className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
+                  <p className="text-lg text-muted-foreground">No deliveries assigned yet</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Orders will appear here once an admin assigns them to you.
+                  </p>
                 </CardContent>
               </Card>
-            ))}
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Recent Orders</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {orders.slice(0, 5).map(renderOrderCard)}
+                </CardContent>
+              </Card>
+            )}
           </div>
+        );
 
-          {orders.length === 0 ? (
-            <Card>
-              <CardContent className="py-16 text-center">
-                <Truck className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-                <p className="text-lg text-muted-foreground">No deliveries assigned yet</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Orders will appear here once an admin assigns them to you.
-                </p>
-              </CardContent>
-            </Card>
-          ) : (
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList>
-                <TabsTrigger value="active">
-                  Active ({activeOrders.length})
-                </TabsTrigger>
-                <TabsTrigger value="completed">
-                  Completed ({completedOrders.length})
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="active" className="space-y-4 mt-4">
-                {activeOrders.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">No active deliveries</p>
-                ) : (
-                  activeOrders.map(renderOrderCard)
-                )}
-              </TabsContent>
-              <TabsContent value="completed" className="space-y-4 mt-4">
-                {completedOrders.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">No completed deliveries yet</p>
-                ) : (
-                  completedOrders.map(renderOrderCard)
-                )}
-              </TabsContent>
-            </Tabs>
-          )}
-        </div>
-      </main>
-      <Footer />
-    </div>
+      case 'active':
+        return (
+          <div className="space-y-4">
+            <h2 className="text-xl font-bold">Active Deliveries ({activeOrders.length})</h2>
+            {activeOrders.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">No active deliveries</p>
+            ) : (
+              activeOrders.map(renderOrderCard)
+            )}
+          </div>
+        );
+
+      case 'completed':
+        return (
+          <div className="space-y-4">
+            <h2 className="text-xl font-bold">Completed Deliveries ({completedOrders.length})</h2>
+            {completedOrders.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">No completed deliveries yet</p>
+            ) : (
+              completedOrders.map(renderOrderCard)
+            )}
+          </div>
+        );
+
+      case 'notifications':
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle>Notifications</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground text-center py-8">No notifications yet</p>
+            </CardContent>
+          </Card>
+        );
+
+      case 'payments':
+        return (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-bold">Payment Collection</h2>
+            <PaymentMonitoring />
+          </div>
+        );
+
+      case 'settings':
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle>Settings</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground text-center py-8">Settings panel coming soon</p>
+            </CardContent>
+          </Card>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <SidebarProvider>
+      <div className="min-h-screen flex w-full">
+        <RiderSidebar activeTab={activeTab} onTabChange={setActiveTab} />
+        <main className="flex-1 flex flex-col overflow-hidden">
+          <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <div className="flex h-14 items-center gap-4 px-4">
+              <SidebarTrigger />
+              <div className="flex-1">
+                <h1 className="text-lg font-semibold">Rider Dashboard</h1>
+              </div>
+            </div>
+          </header>
+          <div className="flex-1 overflow-auto p-6">
+            {renderTabContent()}
+          </div>
+        </main>
+      </div>
+    </SidebarProvider>
   );
 }

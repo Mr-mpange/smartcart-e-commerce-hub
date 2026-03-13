@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Link as LinkIcon, Plus, ExternalLink, Copy, CheckCircle, XCircle, Clock, DollarSign } from "lucide-react";
@@ -73,7 +73,10 @@ export function PaymentMonitoring() {
 
   const handleCreateLink = async () => {
     const amt = parseFloat(amount);
-    if (!amt || amt <= 0) { toast.error("Enter a valid amount"); return; }
+    if (!amt || amt <= 0) { 
+      toast.error("Enter a valid amount"); 
+      return; 
+    }
     
     setCreating(true);
     try {
@@ -85,23 +88,47 @@ export function PaymentMonitoring() {
         return;
       }
 
+      console.log('Creating payment link with data:', {
+        amount: amt,
+        description,
+        recipient_name: recipientName,
+        recipient_phone: recipientPhone
+      });
+
       const { data, error } = await supabase.functions.invoke("create-payment-link", {
-        body: { amount: amt, description, recipient_name: recipientName, recipient_phone: recipientPhone },
+        body: { 
+          amount: amt, 
+          description: description || 'Payment request', 
+          recipient_name: recipientName || 'Customer', 
+          recipient_phone: recipientPhone || '' 
+        },
         headers: {
           Authorization: `Bearer ${session.access_token}`,
         },
       });
-      if (error) throw error;
+
+      console.log('Payment link response:', data, error);
+
+      if (error) {
+        console.error('Supabase function error:', error);
+        throw error;
+      }
+
       if (data?.success) {
-        toast.success("Payment link created!");
+        toast.success("Payment link created successfully!");
         setCreateOpen(false);
-        setAmount(""); setDescription(""); setRecipientName(""); setRecipientPhone("");
+        setAmount(""); 
+        setDescription(""); 
+        setRecipientName(""); 
+        setRecipientPhone("");
         fetchLinks();
       } else {
-        toast.error(data?.error || "Failed to create link");
+        console.error('Payment link creation failed:', data);
+        toast.error(data?.error || "Failed to create payment link");
       }
     } catch (err: any) {
-      toast.error(err.message || "Failed to create payment link");
+      console.error('Payment link creation error:', err);
+      toast.error(err.message || "Failed to create payment link. Please try again.");
     } finally {
       setCreating(false);
     }
@@ -132,7 +159,12 @@ export function PaymentMonitoring() {
             <Button><Plus className="mr-2 h-4 w-4" />Create Payment Link</Button>
           </DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>Create Payment Link</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle>Create Payment Link</DialogTitle>
+              <DialogDescription>
+                Generate a payment link to collect money from customers via mobile money.
+              </DialogDescription>
+            </DialogHeader>
             <div className="space-y-4 pt-4">
               <Input type="number" placeholder="Amount (TZS)" value={amount} onChange={e => setAmount(e.target.value)} />
               <Input placeholder="Recipient name (optional)" value={recipientName} onChange={e => setRecipientName(e.target.value)} />
