@@ -112,7 +112,8 @@ export function PaymentMonitoring() {
       });
 
       const requestBody: any = {
-        amount: amt
+        amount: amt,
+        frontend_url: window.location.origin
       };
 
       // Only add optional fields if they have values

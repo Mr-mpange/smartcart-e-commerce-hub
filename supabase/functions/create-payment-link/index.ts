@@ -6,28 +6,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-interface PaymentPayload {
-  payment_type: string
-  details: {
-    amount: number
-    currency: string
-  }
-  phone_number: string // Required by Snippe API for link creation (but doesn't send USSD)
-  customer: {
-    firstname: string
-    lastname: string
-    email: string
-  }
-  description?: string
-  webhook_url: string
-  redirect_url?: string // Add redirect URL for payment links
-  metadata: {
-    payment_link_id: string
-    order_id?: string | null
-    created_by: string
-  }
-}
-
 // @ts-ignore
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
@@ -98,9 +76,9 @@ Deno.serve(async (req: Request) => {
       })
     }
 
-    const { amount, description, recipient_phone, recipient_name, order_id } = requestBody
+    const { amount, description, recipient_phone, recipient_name, order_id, frontend_url } = requestBody
 
-    console.log('Extracted values:', { amount, description, recipient_phone, recipient_name, order_id })
+    console.log('Extracted values:', { amount, description, recipient_phone, recipient_name, order_id, frontend_url })
 
     if (!amount || amount <= 0) {
       console.error('Invalid amount:', amount)
@@ -112,36 +90,31 @@ Deno.serve(async (req: Request) => {
 
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-    // Remove user profile phone fetching since payment links should be generic
     const linkId = crypto.randomUUID()
 
-    console.log('Creating generic payment link for amount:', amount)
+    console.log('Creating payment link for amount:', amount)
 
     const webhookUrl = `${SUPABASE_URL}/functions/v1/snippe-webhook`
+    
+    // Use provided frontend URL or default to uzanasi.online
+    const baseUrl = frontend_url || 'https://uzanasi.online'
 
-    // Create payload for Snippe API using the correct format
-    // Snippe requires phone_number for link creation but doesn't send USSD to it
-    // The actual payment can come from any phone when someone uses the link
-    const paymentPayload: PaymentPayload = {
+    // Create payload for Snippe API using /v1/payments endpoint
+    // We'll use a generic phone number since this is a shareable link
+    const paymentPayload: any = {
       payment_type: 'mobile',
       details: {
         amount: Math.round(amount),
         currency: 'TZS',
       },
-      phone_number: recipient_phone && recipient_phone.trim() ? 
-        (() => {
-          let phone = recipient_phone.replace(/[^0-9]/g, '')
-          if (phone.startsWith('0')) phone = '255' + phone.substring(1)
-          if (phone && !phone.startsWith('255')) phone = '255' + phone
-          return phone.length >= 12 ? phone : '255754000000'
-        })() : '255754000000', // Valid Vodacom number format for link creation
+      phone_number: '255754000000', // Generic number for link creation
       customer: {
-        firstname: (recipient_name && recipient_name.trim()) ? recipient_name.split(' ')[0] : 'Customer',
-        lastname: (recipient_name && recipient_name.trim()) ? recipient_name.split(' ').slice(1).join(' ') || 'User' : 'User',
-        email: user.email || 'customer@smartcart.co.tz',
+        firstname: 'Payment',
+        lastname: 'Link',
+        email: user.email || 'link@smartcart.co.tz',
       },
       webhook_url: webhookUrl,
-      redirect_url: `${SUPABASE_URL.replace('/functions/v1', '')}/payment/${linkId}`, // Add redirect URL for payment links
+      redirect_url: `${baseUrl}/pay/${linkId}`,
       metadata: { 
         payment_link_id: linkId, 
         order_id: order_id || null,
@@ -157,6 +130,9 @@ Deno.serve(async (req: Request) => {
     console.log('Payment payload before sending:', JSON.stringify(paymentPayload, null, 2))
 
     try {
+      console.log('Calling Snippe /v1/payments API with payload:', JSON.stringify(paymentPayload, null, 2))
+      
+      // Use /v1/payments endpoint - this is what works
       const snippeResponse = await fetch('https://api.snippe.sh/v1/payments', {
         method: 'POST',
         headers: {
@@ -167,37 +143,73 @@ Deno.serve(async (req: Request) => {
         body: JSON.stringify(paymentPayload),
       })
 
-      const snippeData = await snippeResponse.json()
       console.log('Snippe response status:', snippeResponse.status)
-      console.log('Snippe response data:', snippeData)
+      
+      let snippeData
+      try {
+        snippeData = await snippeResponse.json()
+      } catch (e) {
+        console.error('Failed to parse Snippe response as JSON:', e)
+        const text = await snippeResponse.text()
+        console.error('Snippe response text:', text)
+        throw new Error(`Snippe API returned invalid JSON: ${text}`)
+      }
+      
+      console.log('Snippe response data:', JSON.stringify(snippeData, null, 2))
 
       if (snippeResponse.ok && snippeData.data) {
         console.log('Snippe success response:', JSON.stringify(snippeData, null, 2))
-        console.log('Payment link URL from Snippe:', snippeData.data.payment_link_url)
-        console.log('Checkout URL from Snippe:', snippeData.data.checkout_url)
-        console.log('All Snippe data keys:', Object.keys(snippeData.data))
         
-        // Return the raw response for debugging
+        const reference = snippeData.data.reference
+        
+        // Create our own shareable payment link in our system
+        // This link will be stored in the database and users can share it
+        const paymentLink = `${baseUrl}/pay/${linkId}`
+
+        console.log('Payment link created:', paymentLink)
+        console.log('Snippe reference:', reference)
+
+        // Save payment link to database
+        const { error: dbError } = await adminClient
+          .from('payment_links')
+          .insert({
+            id: linkId,
+            amount: Math.round(amount),
+            description: description && description.trim() ? description.trim() : null,
+            status: 'active',
+            checkout_url: paymentLink,
+            snippe_reference: reference,
+            recipient_name: (recipient_name && recipient_name.trim()) ? recipient_name.trim() : null,
+            recipient_phone: (recipient_phone && recipient_phone.trim()) ? recipient_phone.trim() : null,
+            created_by: user.id,
+            created_at: new Date().toISOString()
+          })
+
+        if (dbError) {
+          console.error('Failed to save payment link to database:', dbError)
+          console.warn('Payment link created in Snippe but not saved to DB:', dbError)
+        }
+
         return new Response(JSON.stringify({
           success: true,
           payment_link_id: linkId,
-          reference: snippeData.data.reference,
-          raw_snippe_response: snippeData,
-          available_fields: Object.keys(snippeData.data),
-          payment_link_url: snippeData.data.payment_link_url,
-          checkout_url: snippeData.data.checkout_url,
-          message: 'Check raw_snippe_response to see all available fields'
+          reference: reference,
+          payment_link: paymentLink,
+          payment_link_url: paymentLink,
+          checkout_url: paymentLink,
+          message: 'Payment link created successfully. Share this link to receive payments.'
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 
       } else {
         // Snippe API returned error
         console.error('Snippe API error - Status:', snippeResponse.status)
-        console.error('Snippe API error - Data:', snippeData)
+        console.error('Snippe API error - Data:', JSON.stringify(snippeData, null, 2))
+        
         return new Response(JSON.stringify({ 
           error: 'Snippe API error', 
           details: snippeData,
           status: snippeResponse.status,
-          message: snippeData.message || 'Payment service unavailable'
+          message: snippeData.message || snippeData.error || 'Payment service unavailable'
         }), { 
           status: 400, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
