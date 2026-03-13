@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -47,13 +48,29 @@ export function PaymentMonitoring() {
 
   const fetchLinks = async () => {
     try {
-      const { data, error } = await supabase
+      // Get current user to filter links
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      let query = supabase
         .from("payment_links")
-        .select("id, amount, description, status, checkout_url, snippe_reference, recipient_name, recipient_phone, created_at")
+        .select("id, amount, description, status, checkout_url, snippe_reference, recipient_name, recipient_phone, created_at, created_by")
         .order("created_at", { ascending: false })
         .limit(100);
 
-      if (error) throw error;
+      // Filter by current user if not admin
+      if (user) {
+        query = query.eq('created_by', user.id);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Error fetching payment links:', error);
+        throw error;
+      }
+
+      console.log('Fetched payment links:', data);
+      console.log('Sample link checkout_url:', data?.[0]?.checkout_url);
       setLinks(data || []);
 
       const items = data || [];
@@ -64,7 +81,7 @@ export function PaymentMonitoring() {
         totalAmount: items.filter(l => l.status === "paid").reduce((s, l) => s + l.amount, 0),
       });
     } catch (err) {
-      console.error(err);
+      console.error('Failed to load payment links:', err);
       toast.error("Failed to load payment links");
     } finally {
       setLoading(false);
@@ -74,7 +91,7 @@ export function PaymentMonitoring() {
   const handleCreateLink = async () => {
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) { 
-      toast.error("Enter a valid amount"); 
+      toast.error("Please enter a valid amount greater than 0"); 
       return; 
     }
     
@@ -84,47 +101,154 @@ export function PaymentMonitoring() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         toast.error('Please sign in to create payment links.');
-        setCreating(false);
         return;
       }
 
       console.log('Creating payment link with data:', {
         amount: amt,
-        description,
-        recipient_name: recipientName,
-        recipient_phone: recipientPhone
+        description: description || undefined,
+        recipient_name: recipientName || undefined,
+        recipient_phone: recipientPhone || undefined
       });
 
-      const { data, error } = await supabase.functions.invoke("create-payment-link", {
-        body: { 
-          amount: amt, 
-          description: description || 'Payment request', 
-          recipient_name: recipientName || 'Customer', 
-          recipient_phone: recipientPhone || '' 
-        },
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
+      const requestBody: any = {
+        amount: amt
+      };
 
-      console.log('Payment link response:', data, error);
-
-      if (error) {
-        console.error('Supabase function error:', error);
-        throw error;
+      // Only add optional fields if they have values
+      if (description && description.trim()) {
+        requestBody.description = description.trim();
+      }
+      if (recipientName && recipientName.trim()) {
+        requestBody.recipient_name = recipientName.trim();
+      }
+      if (recipientPhone && recipientPhone.trim()) {
+        requestBody.recipient_phone = recipientPhone.trim();
       }
 
-      if (data?.success) {
-        toast.success("Payment link created successfully!");
-        setCreateOpen(false);
-        setAmount(""); 
-        setDescription(""); 
-        setRecipientName(""); 
-        setRecipientPhone("");
-        fetchLinks();
-      } else {
-        console.error('Payment link creation failed:', data);
-        toast.error(data?.error || "Failed to create payment link");
+      console.log('Final request body:', requestBody);
+
+      // Try direct fetch to get better error details
+      try {
+        const response = await fetch(`${supabase.supabaseUrl}/functions/v1/create-payment-link`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+        const responseData = await response.json();
+        console.log('Direct fetch response:', { status: response.status, data: responseData });
+
+        if (!response.ok) {
+          throw new Error(responseData.message || responseData.error || `HTTP ${response.status}`);
+        }
+
+        if (responseData?.success) {
+          toast.success("Payment link created successfully!");
+          console.log('Payment link created:', responseData);
+          
+          // Clear form
+          setAmount(""); 
+          setDescription(""); 
+          setRecipientName(""); 
+          setRecipientPhone("");
+          setCreateOpen(false);
+          
+          // Refresh the links list immediately and after a delay
+          fetchLinks();
+          setTimeout(() => {
+            fetchLinks();
+          }, 2000);
+        } else {
+          throw new Error(responseData.message || responseData.error || 'Unknown error');
+        }
+
+      } catch (directFetchError: any) {
+        console.error('Direct fetch failed, trying Supabase client:', directFetchError);
+        
+        // Fallback to Supabase client
+        const { data, error } = await supabase.functions.invoke("create-payment-link", {
+          body: requestBody,
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        });
+
+        console.log('Payment link response:', { data, error });
+
+        if (error) {
+          console.error('Supabase function error:', error);
+          
+          // The error might contain the actual response from the Edge Function
+          let errorMessage = 'Failed to create payment link';
+          
+          if (error.message && error.message.includes('Edge Function returned a non-2xx status code')) {
+            // Try to get more details from the data response
+            if (data && typeof data === 'object') {
+              console.log('Error response data:', data);
+              if (data.error) {
+                errorMessage = data.error;
+              }
+              if (data.message) {
+                errorMessage = data.message;
+              }
+              if (data.details && data.details.message) {
+                errorMessage = data.details.message;
+              }
+            }
+          } else if (error.message) {
+            errorMessage = error.message;
+          }
+          
+          throw new Error(errorMessage);
+        }
+
+        // Check if we have data but it contains an error
+        if (data && data.error) {
+          console.error('Edge Function returned error:', data);
+          let errorMessage = data.error;
+          if (data.message) {
+            errorMessage = data.message;
+          }
+          if (data.details && data.details.message) {
+            errorMessage = data.details.message;
+          }
+          throw new Error(errorMessage);
+        }
+
+        if (data?.success) {
+          toast.success("Payment link created successfully!");
+          console.log('Payment link created:', data);
+          
+          // Clear form
+          setAmount(""); 
+          setDescription(""); 
+          setRecipientName(""); 
+          setRecipientPhone("");
+          setCreateOpen(false);
+          
+          // Refresh the links list immediately and after a delay
+          fetchLinks();
+          setTimeout(() => {
+            fetchLinks();
+          }, 2000);
+        } else {
+          console.error('Payment link creation failed:', data);
+          let errorMessage = "Failed to create payment link";
+          
+          if (data?.details?.message) {
+            errorMessage = data.details.message;
+          } else if (data?.error) {
+            errorMessage = data.error;
+          } else if (data?.message) {
+            errorMessage = data.message;
+          }
+          
+          toast.error(errorMessage);
+        }
       }
     } catch (err: any) {
       console.error('Payment link creation error:', err);
@@ -166,18 +290,83 @@ export function PaymentMonitoring() {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 pt-4">
-              <Input type="number" placeholder="Amount (TZS)" value={amount} onChange={e => setAmount(e.target.value)} />
-              <Input placeholder="Recipient name (optional)" value={recipientName} onChange={e => setRecipientName(e.target.value)} />
-              <Input type="tel" placeholder="Recipient phone (optional)" value={recipientPhone} onChange={e => setRecipientPhone(e.target.value)} />
-              <Textarea placeholder="Description" value={description} onChange={e => setDescription(e.target.value)} />
-              <div className="flex gap-2">
-                {[10000, 50000, 100000, 500000].map(a => (
-                  <Button key={a} variant="outline" size="sm" onClick={() => setAmount(String(a))}>{a.toLocaleString()}</Button>
-                ))}
+              <div className="space-y-2">
+                <Label htmlFor="amount">Amount (TSh) *</Label>
+                <Input 
+                  id="amount"
+                  type="number" 
+                  placeholder="Enter amount in TSh" 
+                  value={amount} 
+                  onChange={e => setAmount(e.target.value)}
+                  required
+                />
               </div>
-              <Button className="w-full" onClick={handleCreateLink} disabled={creating}>
-                {creating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LinkIcon className="mr-2 h-4 w-4" />}
-                Generate Link
+              
+              <div className="space-y-2">
+                <Label htmlFor="recipient-name">Recipient Name (Optional)</Label>
+                <Input 
+                  id="recipient-name"
+                  placeholder="Customer name (optional)" 
+                  value={recipientName} 
+                  onChange={e => setRecipientName(e.target.value)} 
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="recipient-phone">Recipient Phone (Optional)</Label>
+                <Input 
+                  id="recipient-phone"
+                  type="tel" 
+                  placeholder="Phone number (optional)" 
+                  value={recipientPhone} 
+                  onChange={e => setRecipientPhone(e.target.value)} 
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="description">Description (Optional)</Label>
+                <Textarea 
+                  id="description"
+                  placeholder="Payment description (optional)" 
+                  value={description} 
+                  onChange={e => setDescription(e.target.value)} 
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label>Quick Amount Selection</Label>
+                <div className="flex gap-2 flex-wrap">
+                  {[10000, 50000, 100000, 500000, 1000000].map(a => (
+                    <Button 
+                      key={a} 
+                      variant="outline" 
+                      size="sm" 
+                      type="button"
+                      onClick={() => setAmount(String(a))}
+                    >
+                      TSh {a.toLocaleString()}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              
+              <Button 
+                className="w-full" 
+                onClick={handleCreateLink} 
+                disabled={creating || !amount || parseFloat(amount) <= 0}
+                type="button"
+              >
+                {creating ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creating Link...
+                  </>
+                ) : (
+                  <>
+                    <LinkIcon className="mr-2 h-4 w-4" />
+                    Generate Payment Link
+                  </>
+                )}
               </Button>
             </div>
           </DialogContent>
@@ -194,10 +383,29 @@ export function PaymentMonitoring() {
 
       {/* Table */}
       <Card>
-        <CardHeader><CardTitle className="text-lg">Payment Links</CardTitle></CardHeader>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg">Payment Links</CardTitle>
+            <Button variant="outline" size="sm" onClick={fetchLinks}>
+              Refresh
+            </Button>
+          </div>
+        </CardHeader>
         <CardContent>
-          {links.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">No payment links yet</p>
+          {loading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : links.length === 0 ? (
+            <div className="text-center py-12">
+              <LinkIcon className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
+              <p className="text-lg text-muted-foreground mb-2">No payment links yet</p>
+              <p className="text-sm text-muted-foreground mb-4">Create your first payment link to start collecting payments</p>
+              <Button onClick={() => setCreateOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Create Payment Link
+              </Button>
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -214,25 +422,59 @@ export function PaymentMonitoring() {
                 <TableBody>
                   {links.map(link => (
                     <TableRow key={link.id}>
-                      <TableCell className="font-mono text-xs">{link.snippe_reference || link.id.slice(0, 8)}</TableCell>
-                      <TableCell className="font-semibold">TSh {link.amount.toLocaleString()}</TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {link.snippe_reference || link.id.slice(0, 8)}
+                      </TableCell>
+                      <TableCell className="font-semibold">
+                        TSh {link.amount.toLocaleString()}
+                      </TableCell>
                       <TableCell>
-                        <div>{link.recipient_name || "—"}</div>
-                        <div className="text-xs text-muted-foreground">{link.recipient_phone || ""}</div>
+                        <div className="space-y-1">
+                          <div className="font-medium">
+                            {link.recipient_name || "No name provided"}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {link.recipient_phone || "No phone provided"}
+                          </div>
+                          {link.description && (
+                            <div className="text-xs text-muted-foreground italic">
+                              "{link.description}"
+                            </div>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>{getStatusBadge(link.status)}</TableCell>
-                      <TableCell className="text-sm">{new Date(link.created_at).toLocaleDateString()}</TableCell>
+                      <TableCell className="text-sm">
+                        {new Date(link.created_at).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </TableCell>
                       <TableCell>
                         <div className="flex gap-1">
-                          {link.checkout_url && (
+                          {link.checkout_url ? (
                             <>
-                              <Button size="icon" variant="ghost" onClick={() => copyLink(link.checkout_url!)}>
+                              <Button 
+                                size="icon" 
+                                variant="ghost" 
+                                onClick={() => copyLink(link.checkout_url!)}
+                                title="Copy link"
+                              >
                                 <Copy className="h-4 w-4" />
                               </Button>
-                              <Button size="icon" variant="ghost" asChild>
-                                <a href={link.checkout_url} target="_blank" rel="noopener"><ExternalLink className="h-4 w-4" /></a>
+                              <Button size="icon" variant="ghost" asChild title="Open link">
+                                <a href={link.checkout_url} target="_blank" rel="noopener">
+                                  <ExternalLink className="h-4 w-4" />
+                                </a>
                               </Button>
                             </>
+                          ) : (
+                            <div className="text-xs text-muted-foreground">
+                              <div>No URL</div>
+                              <div className="font-mono text-xs">ID: {link.id.slice(0, 8)}</div>
+                            </div>
                           )}
                         </div>
                       </TableCell>

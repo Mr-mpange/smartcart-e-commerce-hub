@@ -1,166 +1,224 @@
-import { createClient } from 'npm:@supabase/supabase-js@2';
+// @ts-ignore
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
-};
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
 
-Deno.serve(async (req) => {
+interface PaymentPayload {
+  payment_type: string
+  details: {
+    amount: number
+    currency: string
+  }
+  phone_number: string // Required by Snippe API for link creation (but doesn't send USSD)
+  customer: {
+    firstname: string
+    lastname: string
+    email: string
+  }
+  description?: string
+  webhook_url: string
+  metadata: {
+    payment_link_id: string
+    order_id?: string | null
+    created_by: string
+  }
+}
+
+// @ts-ignore
+Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders })
   }
 
   try {
-    const SNIPPE_API_KEY = Deno.env.get('SNIPPE_API_KEY');
-    const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    // @ts-ignore
+    const SNIPPE_API_KEY = Deno.env.get('SNIPPE_API_KEY')
+    // @ts-ignore
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
+    // @ts-ignore
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-    console.log('Environment check:', {
+    console.log('Environment variables check:', {
       hasSnippeKey: !!SNIPPE_API_KEY,
+      snippeKeyLength: SNIPPE_API_KEY ? SNIPPE_API_KEY.length : 0,
       hasSupabaseUrl: !!SUPABASE_URL,
       hasServiceKey: !!SUPABASE_SERVICE_ROLE_KEY
-    });
+    })
+
+    // Parse request body
+    let requestBody
+    try {
+      requestBody = await req.json()
+      console.log('Parsed request body:', requestBody)
+    } catch (parseError) {
+      console.error('Failed to parse request body:', parseError)
+      return new Response(JSON.stringify({ 
+        error: 'Invalid JSON in request body',
+        details: parseError.message
+      }), { 
+        status: 400, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      })
+    }
 
     if (!SNIPPE_API_KEY) {
-      console.warn('SNIPPE_API_KEY is not configured, using fallback mode');
+      console.error('SNIPPE_API_KEY not configured')
+      return new Response(JSON.stringify({ 
+        error: 'Payment service not configured',
+        message: 'SNIPPE_API_KEY is required. Please configure it in your Supabase project settings.'
+      }), { 
+        status: 500, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      })
     }
 
     // Auth check
-    const authHeader = req.headers.get('Authorization');
+    const authHeader = req.headers.get('Authorization')
     if (!authHeader?.startsWith('Bearer ')) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { 
+        status: 401, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      })
     }
 
+    // @ts-ignore
     const supabase = createClient(SUPABASE_URL, Deno.env.get('SUPABASE_ANON_KEY')!, {
       global: { headers: { Authorization: authHeader } },
-    });
+    })
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { 
+        status: 401, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      })
     }
 
-    const { amount, description, recipient_phone, recipient_name, order_id, expires_in_hours } = await req.json();
+    const { amount, description, recipient_phone, recipient_name, order_id } = requestBody
+
+    console.log('Extracted values:', { amount, description, recipient_phone, recipient_name, order_id })
 
     if (!amount || amount <= 0) {
-      return new Response(JSON.stringify({ error: 'Valid amount is required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      console.error('Invalid amount:', amount)
+      return new Response(JSON.stringify({ error: 'Valid amount is required' }), { 
+        status: 400, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      })
     }
 
-    const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-    // Create payment link record
-    const linkId = crypto.randomUUID();
-    const expiresAt = expires_in_hours ? new Date(Date.now() + expires_in_hours * 3600000).toISOString() : null;
+    // Remove user profile phone fetching since payment links should be generic
+    const linkId = crypto.randomUUID()
 
-    // Format phone for Snippe - ensure it's properly formatted
-    let phone = (recipient_phone || '').replace(/[^0-9]/g, '');
-    if (phone.startsWith('0')) phone = '255' + phone.substring(1);
-    if (phone && !phone.startsWith('255')) phone = '255' + phone;
+    console.log('Creating generic payment link for amount:', amount)
 
-    const webhookUrl = `${SUPABASE_URL}/functions/v1/snippe-webhook`;
+    const webhookUrl = `${SUPABASE_URL}/functions/v1/snippe-webhook`
 
-    // Ensure all required fields are present for Snippe API
-    const paymentPayload = {
+    // Create payload for Snippe API using the correct format
+    // Snippe requires phone_number for link creation but doesn't send USSD to it
+    // The actual payment can come from any phone when someone uses the link
+    const paymentPayload: PaymentPayload = {
       payment_type: 'mobile',
-      amount: Math.round(amount), // Make amount a top-level field
-      currency: 'TZS',
-      phone_number: phone || '255700000000', // Provide default phone if none given
+      details: {
+        amount: Math.round(amount),
+        currency: 'TZS',
+      },
+      phone_number: recipient_phone && recipient_phone.trim() ? 
+        (() => {
+          let phone = recipient_phone.replace(/[^0-9]/g, '')
+          if (phone.startsWith('0')) phone = '255' + phone.substring(1)
+          if (phone && !phone.startsWith('255')) phone = '255' + phone
+          return phone.length >= 12 ? phone : '255754000000'
+        })() : '255754000000', // Valid Vodacom number format for link creation
       customer: {
-        firstname: recipient_name?.split(' ')[0] || 'Customer',
-        lastname: recipient_name?.split(' ').slice(1).join(' ') || 'User',
+        firstname: (recipient_name && recipient_name.trim()) ? recipient_name.split(' ')[0] : 'Customer',
+        lastname: (recipient_name && recipient_name.trim()) ? recipient_name.split(' ').slice(1).join(' ') || 'User' : 'User',
         email: user.email || 'customer@smartcart.co.tz',
       },
-      description: description || 'Payment link',
       webhook_url: webhookUrl,
       metadata: { 
         payment_link_id: linkId, 
         order_id: order_id || null,
         created_by: user.id 
       },
-    };
+    }
 
-    console.log('Creating payment with payload:', JSON.stringify(paymentPayload, null, 2));
+    // Add description if provided
+    if (description && description.trim()) {
+      paymentPayload.description = description.trim()
+    }
 
-    let snippeData;
-    let snippeResponse;
-    
-    // Only try Snippe API if we have the API key
-    if (SNIPPE_API_KEY) {
-      try {
-        snippeResponse = await fetch('https://api.snippe.sh/v1/payments', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${SNIPPE_API_KEY}`,
-            'Content-Type': 'application/json',
-            'Idempotency-Key': `link-${linkId}`,
-          },
-          body: JSON.stringify(paymentPayload),
-        });
+    console.log('Payment payload before sending:', JSON.stringify(paymentPayload, null, 2))
 
-        snippeData = await snippeResponse.json();
-        console.log('Snippe response:', JSON.stringify(snippeData, null, 2));
-      } catch (fetchError) {
-        console.error('Snippe API fetch error:', fetchError);
-        snippeResponse = { ok: false };
+    try {
+      const snippeResponse = await fetch('https://api.snippe.sh/v1/payments', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${SNIPPE_API_KEY}`,
+          'Content-Type': 'application/json',
+          'Idempotency-Key': `link-${linkId}`,
+        },
+        body: JSON.stringify(paymentPayload),
+      })
+
+      const snippeData = await snippeResponse.json()
+      console.log('Snippe response status:', snippeResponse.status)
+      console.log('Snippe response data:', snippeData)
+
+      if (snippeResponse.ok && snippeData.data) {
+        console.log('Snippe success response:', JSON.stringify(snippeData, null, 2))
+        console.log('Payment link URL from Snippe:', snippeData.data.payment_link_url)
+        console.log('Checkout URL from Snippe:', snippeData.data.checkout_url)
+        console.log('All Snippe data keys:', Object.keys(snippeData.data))
+        
+        // Return the raw response for debugging
+        return new Response(JSON.stringify({
+          success: true,
+          payment_link_id: linkId,
+          reference: snippeData.data.reference,
+          raw_snippe_response: snippeData,
+          available_fields: Object.keys(snippeData.data),
+          payment_link_url: snippeData.data.payment_link_url,
+          checkout_url: snippeData.data.checkout_url,
+          message: 'Check raw_snippe_response to see all available fields'
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+
+      } else {
+        // Snippe API returned error
+        console.error('Snippe API error - Status:', snippeResponse.status)
+        console.error('Snippe API error - Data:', snippeData)
+        return new Response(JSON.stringify({ 
+          error: 'Snippe API error', 
+          details: snippeData,
+          status: snippeResponse.status,
+          message: snippeData.message || 'Payment service unavailable'
+        }), { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        })
       }
-    } else {
-      console.log('No Snippe API key, using fallback mode');
-      snippeResponse = { ok: false };
+
+    } catch (fetchError: any) {
+      return new Response(JSON.stringify({ 
+        error: 'Failed to connect to payment service', 
+        details: fetchError.message 
+      }), { 
+        status: 500, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      })
     }
 
-    // Use fallback if Snippe API failed or not configured
-    if (!snippeResponse.ok) {
-      console.log('Using fallback payment link data');
-      snippeData = {
-        data: {
-          reference: `DEV_${linkId.slice(0, 8)}`,
-          checkout_url: `https://smartcart.co.tz/pay/${linkId}`,
-          status: 'active'
-        }
-      };
-    }
-
-    // Save to database
-    const { error: insertError } = await adminClient.from('payment_links').insert({
-      id: linkId,
-      created_by: user.id,
-      amount,
-      description: description || 'Payment link',
-      status: 'active',
-      checkout_url: snippeData.data?.checkout_url || null,
-      snippe_reference: snippeData.data?.reference || null,
-      order_id: order_id || null,
-      recipient_phone: recipient_phone || null,
-      recipient_name: recipient_name || null,
-      expires_at: expiresAt,
-    });
-
-    if (insertError) {
-      console.error('DB insert error:', insertError);
-    }
-
-    // Record in ledger
-    await adminClient.from('ledger_entries').insert({
-      transaction_type: 'collection',
-      amount,
-      sender_name: recipient_name || 'Customer',
-      sender_id: null,
-      receiver_id: user.id,
-      reference: snippeData.data?.reference || linkId,
-      reference_id: linkId,
-      status: 'pending',
-      description: description || 'Payment link created',
-    });
-
-    return new Response(JSON.stringify({
-      success: true,
-      payment_link_id: linkId,
-      reference: snippeData.data?.reference,
-      checkout_url: snippeData.data?.checkout_url,
-    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-
-  } catch (error) {
-    console.error('Error creating payment link:', error);
-    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  } catch (error: any) {
+    return new Response(JSON.stringify({ 
+      error: 'Failed to create payment link', 
+      details: error.message || 'Unknown error' 
+    }), { 
+      status: 500, 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    })
   }
-});
+})
