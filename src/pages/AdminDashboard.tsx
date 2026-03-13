@@ -98,28 +98,33 @@ const AdminDashboard = () => {
 
       if (error) throw error;
       
-      // If no profile exists, create a default one
+      // If no profile exists, try to create a default one
       if (!profile) {
-        const { data: newProfile, error: createError } = await supabase
-          .from('profiles')
-          .insert([{ 
-            id: user.id, 
-            full_name: user.email?.split('@')[0] || 'Admin User' 
-          }])
-          .select('full_name')
-          .single();
-          
-        if (createError) {
-          console.error('Error creating admin profile:', createError);
-          setAdminProfile({ full_name: 'Admin User' });
-        } else {
-          setAdminProfile(newProfile);
+        // Try to create profile, but don't fail if RLS prevents it
+        try {
+          const { data: newProfile, error: createError } = await supabase
+            .from('profiles')
+            .insert([{ 
+              id: user.id, 
+              full_name: user.email?.split('@')[0] || 'Admin User' 
+            }])
+            .select('full_name')
+            .single();
+            
+          if (createError) {
+            // RLS policy might prevent creation, use fallback
+            setAdminProfile({ full_name: user.email?.split('@')[0] || 'Admin User' });
+          } else {
+            setAdminProfile(newProfile);
+          }
+        } catch (createError) {
+          // Fallback to email-based name if profile creation fails
+          setAdminProfile({ full_name: user.email?.split('@')[0] || 'Admin User' });
         }
       } else {
         setAdminProfile(profile);
       }
     } catch (error) {
-      console.error('Error fetching admin profile:', error);
       // Set a default profile to prevent UI issues
       setAdminProfile({ full_name: 'Admin User' });
     }
@@ -127,18 +132,14 @@ const AdminDashboard = () => {
 
   const fetchData = async () => {
     try {
-      console.log('Fetching admin data...');
-      
       // Check current user and roles
       const { data: { user: currentUser } } = await supabase.auth.getUser();
-      console.log('Current user:', currentUser?.id);
       
       if (currentUser) {
         const { data: userRoles } = await supabase
           .from('user_roles')
           .select('role')
           .eq('user_id', currentUser.id);
-        console.log('Current user roles:', userRoles);
       }
 
       const [vendorsRes, ridersRes, profilesRes, productsRes, ordersRes] = await Promise.all([
@@ -148,10 +149,6 @@ const AdminDashboard = () => {
         supabase.from("products").select("id", { count: "exact", head: true }),
         supabase.from("orders").select("id", { count: "exact", head: true }),
       ]);
-
-      console.log('Vendors response:', vendorsRes);
-      console.log('Vendors data:', vendorsRes.data);
-      console.log('Vendors error:', vendorsRes.error);
 
       const vendorData = vendorsRes.data || [];
       const riderData = ridersRes.data || [];
@@ -181,7 +178,7 @@ const AdminDashboard = () => {
         totalRiders: riderData.length,
       });
     } catch (error) {
-      console.error("Error fetching admin data:", error);
+      // Error fetching admin data
       toast.error("Failed to load admin data");
     } finally {
       setLoading(false);

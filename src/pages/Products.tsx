@@ -65,28 +65,18 @@ const Products = () => {
 
   const fetchProducts = async () => {
     try {
-      console.log('Fetching products...');
-      
       // First, let's see all vendors regardless of approval status
       const { data: allVendors, error: allVendorsError } = await supabase
         .from('vendor_profiles')
         .select('user_id, business_name, is_approved');
-      
-      console.log('All vendors in database:', allVendors);
-      console.log('All vendors error:', allVendorsError);
       
       const { data: approvedVendors, error: vendorError } = await supabase
         .from('vendor_profiles')
         .select('user_id, business_name')
         .eq('is_approved', true);
 
-      console.log('Approved vendors:', approvedVendors);
-      console.log('Vendor fetch error:', vendorError);
-
       const approvedIds = approvedVendors?.map(v => v.user_id) || [];
       const vendorMap = new Map(approvedVendors?.map(v => [v.user_id, v.business_name]) || []);
-
-      console.log('Approved vendor IDs:', approvedIds);
 
       // Let's also create a map of all vendors for fallback
       const allVendorMap = new Map(allVendors?.map(v => [v.user_id, v.business_name]) || []);
@@ -99,10 +89,8 @@ const Products = () => {
 
       // For now, let's show all products regardless of vendor approval status
       // This will help us see if there are products in the database
-      console.log('Fetching all active products (ignoring vendor approval for debugging)');
 
       const { data, error } = await query;
-      console.log('Products query result:', { data, error });
       
       if (error) throw error;
 
@@ -137,10 +125,8 @@ const Products = () => {
         vendor_name: vendorMap.get(p.vendor_id) || allVendorMap.get(p.vendor_id) || 'Vendor (Pending Approval)',
       }));
 
-      console.log('Final products with stats:', productsWithStats);
       setProducts(productsWithStats);
     } catch (error: any) {
-      console.error('Error fetching products:', error);
       toast.error('Failed to load products');
     } finally {
       setLoading(false);

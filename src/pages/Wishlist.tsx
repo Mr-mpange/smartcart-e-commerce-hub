@@ -39,13 +39,11 @@ const Wishlist = () => {
   }, [user]);
 
   const fetchVendors = async () => {
-    console.log('Fetching vendors for wishlist...');
     // Fetch all vendors, not just approved ones, so wishlist items show vendor names
     const { data, error } = await supabase
       .from('vendor_profiles')
       .select('user_id, business_name, is_approved');
     
-    console.log('Wishlist vendors:', data, error);
     // Create map with all vendors, but indicate approval status
     const vendorMap = new Map();
     data?.forEach(v => {
@@ -79,7 +77,6 @@ const Wishlist = () => {
         setItems([]);
       }
     } catch (error) {
-      console.error('Error fetching wishlist:', error);
       toast.error('Failed to load wishlist');
     } finally {
       setLoading(false);

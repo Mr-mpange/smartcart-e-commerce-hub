@@ -69,14 +69,15 @@ export default function Auth() {
     // Check if we're in OTP flow from localStorage
     const isInOtpFlow = localStorage.getItem('otp_flow_active') === 'true';
     
-    // Only navigate if we're not in the middle of OTP flow
-    if (!authLoading && user && userRole && !isOtpFlow && !isInOtpFlow) {
+    // Only navigate if we're not in the middle of OTP flow and not currently logging in
+    // This prevents conflicts with manual navigation after OTP login
+    if (!authLoading && user && userRole && !isOtpFlow && !isInOtpFlow && !loading) {
       if (userRole === 'admin') navigate('/admin/dashboard');
       else if (userRole === 'vendor') navigate('/vendor/dashboard');
       else if (userRole === 'delivery_rider') navigate('/rider/dashboard');
       else navigate('/');
     }
-  }, [authLoading, user, userRole, navigate, isOtpFlow]);
+  }, [authLoading, user, userRole, navigate, isOtpFlow, loading]);
 
   const handleSendOtp = async () => {
     if (!email || !password) {
@@ -210,10 +211,7 @@ export default function Auth() {
       localStorage.removeItem('otp_phone');
       localStorage.removeItem('otp_password');
       
-      // Wait for auth state to settle before navigating
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Navigate based on user role
+      // Navigate based on user role immediately
       if (signInData?.user) {
         const { data: roles } = await supabase
           .from('user_roles')
@@ -221,6 +219,8 @@ export default function Auth() {
           .eq('user_id', signInData.user.id);
         
         const roleList = roles?.map(r => r.role) || [];
+        
+        // Navigate immediately based on role
         if (roleList.includes('admin')) {
           navigate('/admin/dashboard');
         } else if (roleList.includes('vendor')) {

@@ -13,7 +13,6 @@ export function PageVisibilityManager() {
         
         // Prevent automatic refreshes by stopping any pending navigation
         // This is a gentle approach that doesn't break functionality
-        console.log('Page visibility restored - preventing unnecessary refreshes');
       }
     };
 
@@ -21,7 +20,7 @@ export function PageVisibilityManager() {
     const handleFocus = () => {
       // Prevent any automatic refreshes when page gains focus
       if (wasHidden) {
-        console.log('Page focused after being hidden - maintaining state');
+        // Page focused after being hidden - maintaining state
       }
     };
 

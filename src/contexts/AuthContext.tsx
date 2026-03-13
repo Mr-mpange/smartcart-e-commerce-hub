@@ -31,8 +31,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Auth state change:', event, session?.user?.id);
-        
         // Prevent processing duplicate events
         const currentState = { user: session?.user ?? null, session };
         if (
@@ -118,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUserRole(newRole);
       lastFetchedUserId.current = userId;
     } catch (error) {
-      console.error('Error fetching user role:', error);
+      // Error fetching user role - will retry
       setUserRole(null);
     } finally {
       setLoading(false);

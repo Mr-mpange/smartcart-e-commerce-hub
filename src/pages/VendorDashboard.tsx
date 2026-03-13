@@ -53,7 +53,7 @@ export default function VendorDashboard() {
       if (error) throw error;
       setVendorProfile(data);
     } catch (error) {
-      console.error('Error fetching vendor profile:', error);
+      // Error fetching vendor profile - using fallback
     }
   };
 
