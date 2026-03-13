@@ -20,6 +20,7 @@ interface PaymentPayload {
   }
   description?: string
   webhook_url: string
+  redirect_url?: string // Add redirect URL for payment links
   metadata: {
     payment_link_id: string
     order_id?: string | null
@@ -140,6 +141,7 @@ Deno.serve(async (req: Request) => {
         email: user.email || 'customer@smartcart.co.tz',
       },
       webhook_url: webhookUrl,
+      redirect_url: `${SUPABASE_URL.replace('/functions/v1', '')}/payment/${linkId}`, // Add redirect URL for payment links
       metadata: { 
         payment_link_id: linkId, 
         order_id: order_id || null,
