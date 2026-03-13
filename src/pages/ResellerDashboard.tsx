@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
-import { ShoppingCart, DollarSign, TrendingUp, Users, Package } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ResellerProductManagement } from '@/components/ResellerProductManagement';
+import { ShoppingCart, DollarSign, TrendingUp, Users, Package, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -109,94 +111,162 @@ export default function ResellerDashboard() {
             </Card>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">Total Sales</CardTitle>
-                <ShoppingCart className="h-4 w-4 text-primary" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">TSh {stats.totalSales.toLocaleString()}</div>
-                <p className="text-xs text-muted-foreground">Products sold</p>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">Commission Earned</CardTitle>
-                <DollarSign className="h-4 w-4 text-primary" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">TSh {stats.totalCommission.toLocaleString()}</div>
-                <p className="text-xs text-muted-foreground">{stats.commissionRate}% commission rate</p>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">Commission Rate</CardTitle>
-                <TrendingUp className="h-4 w-4 text-primary" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.commissionRate}%</div>
-                <p className="text-xs text-muted-foreground">Per sale commission</p>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">Customers</CardTitle>
-                <Users className="h-4 w-4 text-primary" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.totalCustomers}</div>
-                <p className="text-xs text-muted-foreground">Referred customers</p>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Getting Started as a Reseller</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <h4 className="font-medium">1. Share Products</h4>
-                  <p className="text-sm text-muted-foreground">
-                    Browse our product catalog and share products with your customers using your unique referral links.
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <h4 className="font-medium">2. Earn Commissions</h4>
-                  <p className="text-sm text-muted-foreground">
-                    Earn {stats.commissionRate}% commission on every sale made through your referral links.
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <h4 className="font-medium">3. Track Performance</h4>
-                  <p className="text-sm text-muted-foreground">
-                    Monitor your sales, commissions, and customer referrals through this dashboard.
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <h4 className="font-medium">4. Get Paid</h4>
-                  <p className="text-sm text-muted-foreground">
-                    Withdraw your earned commissions directly to your mobile money account.
+          {/* Price Control Notice */}
+          <Card className="border-blue-200 bg-blue-50">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="h-5 w-5 text-blue-600" />
+                <div>
+                  <h3 className="font-semibold text-blue-800">Pricing Guidelines</h3>
+                  <p className="text-sm text-blue-700">
+                    You cannot sell products above the vendor's original price. Maximum markup allowed: {stats.commissionRate}%
                   </p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent Activity</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground text-center py-8">No recent activity yet</p>
-            </CardContent>
-          </Card>
+          <Tabs defaultValue="overview" className="space-y-6">
+            <TabsList>
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="products">My Products</TabsTrigger>
+              <TabsTrigger value="sales">Sales History</TabsTrigger>
+              <TabsTrigger value="commissions">Commissions</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="overview" className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <CardTitle className="text-sm font-medium">Total Sales</CardTitle>
+                    <ShoppingCart className="h-4 w-4 text-primary" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">TSh {stats.totalSales.toLocaleString()}</div>
+                    <p className="text-xs text-muted-foreground">Products sold</p>
+                  </CardContent>
+                </Card>
+                
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <CardTitle className="text-sm font-medium">Commission Earned</CardTitle>
+                    <DollarSign className="h-4 w-4 text-primary" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">TSh {stats.totalCommission.toLocaleString()}</div>
+                    <p className="text-xs text-muted-foreground">{stats.commissionRate}% commission rate</p>
+                  </CardContent>
+                </Card>
+                
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <CardTitle className="text-sm font-medium">Commission Rate</CardTitle>
+                    <TrendingUp className="h-4 w-4 text-primary" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{stats.commissionRate}%</div>
+                    <p className="text-xs text-muted-foreground">Per sale commission</p>
+                  </CardContent>
+                </Card>
+                
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <CardTitle className="text-sm font-medium">Customers</CardTitle>
+                    <Users className="h-4 w-4 text-primary" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{stats.totalCustomers}</div>
+                    <p className="text-xs text-muted-foreground">Referred customers</p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Getting Started as a Reseller</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <h4 className="font-medium">1. Add Products</h4>
+                      <p className="text-sm text-muted-foreground">
+                        Browse our product catalog and add products to your reseller catalog. You cannot exceed vendor prices.
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <h4 className="font-medium">2. Set Your Prices</h4>
+                      <p className="text-sm text-muted-foreground">
+                        Set your selling prices within the allowed markup limit. Higher prices = higher commissions.
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <h4 className="font-medium">3. Share & Sell</h4>
+                      <p className="text-sm text-muted-foreground">
+                        Share products with your customers using your unique referral links and earn commissions.
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <h4 className="font-medium">4. Track & Earn</h4>
+                      <p className="text-sm text-muted-foreground">
+                        Monitor your sales, commissions, and withdraw earnings directly to your mobile money account.
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Recent Activity</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-muted-foreground text-center py-8">No recent activity yet</p>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="products">
+              <ResellerProductManagement resellerId={resellerProfile?.id} />
+            </TabsContent>
+
+            <TabsContent value="sales">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Sales History</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-muted-foreground text-center py-8">No sales yet</p>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="commissions">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Commission Tracking</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="text-center p-4 border rounded-lg">
+                        <div className="text-2xl font-bold text-green-600">TSh {stats.totalCommission.toLocaleString()}</div>
+                        <p className="text-sm text-muted-foreground">Total Earned</p>
+                      </div>
+                      <div className="text-center p-4 border rounded-lg">
+                        <div className="text-2xl font-bold text-blue-600">TSh 0</div>
+                        <p className="text-sm text-muted-foreground">Pending</p>
+                      </div>
+                      <div className="text-center p-4 border rounded-lg">
+                        <div className="text-2xl font-bold text-purple-600">TSh 0</div>
+                        <p className="text-sm text-muted-foreground">Withdrawn</p>
+                      </div>
+                    </div>
+                    <p className="text-muted-foreground text-center py-4">No commission history yet</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </div>
       </main>
       <Footer />

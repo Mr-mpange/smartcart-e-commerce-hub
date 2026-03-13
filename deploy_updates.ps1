@@ -36,7 +36,7 @@ Write-Host "Step 2 (OPTIONAL): Apply reseller system migration" -ForegroundColor
 Write-Host "This enables full reseller functionality with database storage" -ForegroundColor Cyan
 Write-Host "Run this SQL in your Supabase SQL Editor:" -ForegroundColor Cyan
 Write-Host ""
-Get-Content "supabase/migrations/20260313140000_add_reseller_system.sql"
+Get-Content "supabase/migrations/20260313150000_reseller_system_clean.sql"
 Write-Host ""
 $resellerChoice = Read-Host "Did you apply the reseller migration? (y/n)"
 
