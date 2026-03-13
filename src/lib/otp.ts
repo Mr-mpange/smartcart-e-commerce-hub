@@ -40,10 +40,7 @@ export const sendOTP = async (email: string, phone: string): Promise<{ success: 
     
     const formattedPhone = formatPhoneNumber(phone);
     
-    // In development, log the OTP to console
-    console.log(`🔐 OTP for ${email} (${formattedPhone}): ${otp}`);
-    
-    // Show toast notification with OTP for development
+    // In development, show the OTP to console and create notification
     if (typeof window !== 'undefined') {
       // Create a prominent notification element
       const notification = document.createElement('div');

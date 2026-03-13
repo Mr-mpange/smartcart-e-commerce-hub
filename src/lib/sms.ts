@@ -17,13 +17,11 @@ export async function sendOrderStatusSMS(
     });
 
     if (error) {
-      console.error('SMS notification error:', error);
       return { success: false, error: error.message };
     }
 
     return { success: data?.success || false, error: data?.error };
   } catch (err: any) {
-    console.error('Failed to send SMS:', err);
     return { success: false, error: err.message };
   }
 }
@@ -41,13 +39,11 @@ export async function sendDirectSMS(
     });
 
     if (error) {
-      console.error('SMS error:', error);
       return { success: false, error: error.message };
     }
 
     return { success: data?.success || false, error: data?.error };
   } catch (err: any) {
-    console.error('Failed to send SMS:', err);
     return { success: false, error: err.message };
   }
 }
@@ -64,7 +60,6 @@ export async function sendOTPSMS(
     });
 
     if (error) {
-      console.error('OTP SMS error:', error);
       return { success: false, error: error.message };
     }
 
@@ -74,7 +69,6 @@ export async function sendOTPSMS(
       message: data?.message 
     };
   } catch (err: any) {
-    console.error('Failed to send OTP SMS:', err);
     return { success: false, error: err.message };
   }
 }
@@ -84,8 +78,6 @@ export async function verifyOTPSMS(
   otpCode: string
 ): Promise<{ success: boolean; error?: string; message?: string }> {
   try {
-    console.log('Sending OTP verification request:', { email, otpCode });
-    
     const { data, error } = await supabase.functions.invoke('briq-sms', {
       body: {
         action: 'verify_otp',
@@ -94,11 +86,7 @@ export async function verifyOTPSMS(
       },
     });
 
-    console.log('OTP verification response - data:', data);
-    console.log('OTP verification response - error:', error);
-
     if (error) {
-      console.error('OTP verification error:', error);
       return { success: false, error: error.message };
     }
 
@@ -108,7 +96,6 @@ export async function verifyOTPSMS(
       message: data?.message 
     };
   } catch (err: any) {
-    console.error('Failed to verify OTP:', err);
     return { success: false, error: err.message };
   }
 }
