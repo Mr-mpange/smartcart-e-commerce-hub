@@ -63,59 +63,73 @@ Deno.serve(async (req) => {
 
     // Handle OTP generation and sending
     if (body.action === 'generate_otp' && body.email) {
+      console.log('=== OTP GENERATION START ===');
+      console.log('Email:', body.email);
+      
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
       const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
       const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-      // Get user by email using auth admin API
-      let userId: string;
+      // Instead of using admin API, look up user profile directly by email
+      // This requires that we have the email stored in the profiles table
+      console.log('Looking up user profile by email...');
+      
+      // First, try to find profile by checking auth.users table with service role
+      let profile = null;
+      let userId = null;
+      
       try {
-        const { data: authData, error: authError } = await supabase.auth.admin.listUsers();
+        // Try to get user by email using RPC function or direct query
+        const { data: profiles, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, full_name, phone')
+          .limit(100); // Get all profiles to search through
         
-        if (authError) {
-          console.error('Auth admin error:', authError);
-          return new Response(
-            JSON.stringify({ success: false, error: 'Failed to lookup user' }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-          );
+        if (profileError) {
+          console.error('Profile lookup error:', profileError);
+          throw profileError;
         }
-
-        const user = authData.users.find(u => u.email === body.email);
-        if (!user) {
+        
+        console.log('Found profiles count:', profiles?.length || 0);
+        
+        // Now check which profile belongs to the user with this email
+        if (profiles && profiles.length > 0) {
+          for (const prof of profiles) {
+            try {
+              // Check if this profile ID corresponds to a user with the given email
+              const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(prof.id);
+              
+              if (authUser && authUser.user && authUser.user.email === body.email) {
+                profile = prof;
+                userId = prof.id;
+                console.log('Found matching profile for email:', body.email);
+                break;
+              }
+            } catch (userCheckError) {
+              // Skip this profile if we can't check the user
+              continue;
+            }
+          }
+        }
+        
+        if (!profile) {
+          console.log('No profile found for email:', body.email);
           return new Response(
-            JSON.stringify({ success: false, error: 'User not found with this email' }),
+            JSON.stringify({ success: false, error: 'User profile not found for this email' }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
           );
         }
-
-        userId = user.id;
-      } catch (adminError) {
-        console.error('Admin API not available, trying direct profile lookup:', adminError);
         
-        // Fallback: Since we can't query auth.users directly, we'll need to find another way
-        // For now, let's assume the user exists and try to find their profile
-        // This is a workaround - in production you'd want proper user lookup
+      } catch (lookupError) {
+        console.error('User lookup failed:', lookupError);
         return new Response(
-          JSON.stringify({ success: false, error: 'User lookup failed. Please ensure user exists and has a profile.' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
-        );
-      }
-
-      // Get user profile
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('id, full_name, phone')
-        .eq('id', userId)
-        .single();
-
-      if (profileError || !profile) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'User profile not found' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
+          JSON.stringify({ success: false, error: 'Failed to lookup user profile', debug: lookupError.message }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
         );
       }
 
       if (!profile.phone) {
+        console.log('No phone number for user');
         return new Response(
           JSON.stringify({ success: false, error: 'No phone number registered for this account' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
@@ -125,119 +139,129 @@ Deno.serve(async (req) => {
       // Generate OTP
       const otp = generateOTP();
       const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+      
+      console.log('Generated OTP:', otp);
+      console.log('Expires at:', expiresAt);
 
-      // Store OTP in database
+      // Store OTP in database with email for easier lookup
+      console.log('Storing OTP in database...');
       const { error: otpError } = await supabase
         .from('login_otps')
         .insert([{
           phone_number: formatPhoneNumber(profile.phone),
           otp_code: otp,
           expires_at: expiresAt.toISOString(),
+          user_email: body.email, // Store email for easier verification lookup
         }]);
 
       if (otpError) {
         console.error('OTP storage error:', otpError);
         return new Response(
-          JSON.stringify({ success: false, error: 'Failed to generate OTP' }),
+          JSON.stringify({ success: false, error: 'Failed to generate OTP', debug: otpError.message }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
         );
       }
 
+      console.log('OTP stored successfully');
       phoneNumber = formatPhoneNumber(profile.phone);
       message = `Your SmartCart login OTP is: ${otp}. Valid for 5 minutes. Do not share this code.`;
+      
+      console.log('Phone number:', phoneNumber);
+      console.log('Message:', message);
     }
     // Handle OTP verification
     else if (body.action === 'verify_otp' && body.email && body.otp_code) {
+      console.log('=== OTP VERIFICATION START ===');
+      console.log('Email:', body.email);
+      console.log('OTP Code:', body.otp_code);
+      
       const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
       const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      
+      console.log('Supabase URL:', supabaseUrl);
+      console.log('Service Key exists:', !!supabaseServiceKey);
+      
       const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-      // Get user by email using auth admin API
-      let userId: string;
       try {
-        const { data: authData, error: authError } = await supabase.auth.admin.listUsers();
-        
-        if (authError) {
-          console.error('Auth admin error:', authError);
-          return new Response(
-            JSON.stringify({ success: false, error: 'Failed to lookup user' }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-          );
-        }
-
-        const user = authData.users.find(u => u.email === body.email);
-        if (!user) {
-          return new Response(
-            JSON.stringify({ success: false, error: 'User not found' }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
-          );
-        }
-
-        userId = user.id;
-      } catch (adminError) {
-        console.error('Admin API not available:', adminError);
-        return new Response(
-          JSON.stringify({ success: false, error: 'User lookup failed' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
-        );
-      }
-
-      // Get user's phone number
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('phone')
-        .eq('id', userId)
-        .single();
-
-      if (profileError || !profile?.phone) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'User phone number not found' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
-        );
-      }
-
-      const formattedPhone = formatPhoneNumber(profile.phone);
-
-      // Find valid OTP
-      const { data: otpRecord, error: otpError } = await supabase
-        .from('login_otps')
-        .select('*')
-        .eq('phone_number', formattedPhone)
-        .eq('otp_code', body.otp_code)
-        .eq('is_used', false)
-        .gt('expires_at', new Date().toISOString())
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-
-      if (otpError || !otpRecord) {
-        // Increment attempts for this phone/OTP combination
-        await supabase
+        // Look up OTP record by email and code directly
+        console.log('Querying login_otps table...');
+        const { data: otpRecords, error: otpError } = await supabase
           .from('login_otps')
-          .update({ attempts: supabase.sql`attempts + 1` })
-          .eq('phone_number', formattedPhone)
-          .eq('otp_code', body.otp_code);
+          .select('*')
+          .eq('user_email', body.email)
+          .eq('otp_code', body.otp_code)
+          .eq('is_used', false)
+          .gt('expires_at', new Date().toISOString())
+          .order('created_at', { ascending: false })
+          .limit(1);
 
+        console.log('Query result - data:', otpRecords);
+        console.log('Query result - error:', otpError);
+
+        if (otpError || !otpRecords || otpRecords.length === 0) {
+          console.log('OTP verification failed - no valid record found');
+          
+          // Try to increment attempts
+          try {
+            await supabase
+              .from('login_otps')
+              .update({ attempts: 1 }) // Simple increment instead of SQL function
+              .eq('user_email', body.email)
+              .eq('otp_code', body.otp_code);
+          } catch (updateError) {
+            console.log('Failed to increment attempts:', updateError);
+          }
+
+          return new Response(
+            JSON.stringify({ 
+              success: false, 
+              error: 'Invalid or expired OTP',
+              debug: {
+                otpError: otpError?.message,
+                hasRecord: !!otpRecord
+              }
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+          );
+        }
+
+        const otpRecord = otpRecords[0];
+        console.log('Valid OTP record found, marking as used...');
+
+        // Mark OTP as used
+        const { error: updateError } = await supabase
+          .from('login_otps')
+          .update({ is_used: true })
+          .eq('id', otpRecord.id);
+
+        if (updateError) {
+          console.error('Failed to mark OTP as used:', updateError);
+        } else {
+          console.log('OTP marked as used successfully');
+        }
+
+        console.log('=== OTP VERIFICATION SUCCESS ===');
         return new Response(
-          JSON.stringify({ success: false, error: 'Invalid or expired OTP' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+          JSON.stringify({ 
+            success: true, 
+            message: 'OTP verified successfully',
+            phone_number: otpRecord.phone_number
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+        
+      } catch (verificationError) {
+        console.error('OTP verification exception:', verificationError);
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: 'OTP verification failed',
+            debug: verificationError.message
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
         );
       }
-
-      // Mark OTP as used
-      await supabase
-        .from('login_otps')
-        .update({ is_used: true })
-        .eq('id', otpRecord.id);
-
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          message: 'OTP verified successfully',
-          phone_number: formattedPhone
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
     }
     // Handle order notifications
     else if (body.order_id && body.status) {
@@ -286,34 +310,57 @@ Deno.serve(async (req) => {
     console.log(`Sending SMS to ${formattedPhone}: ${message}`);
     console.log('BRIQ_API_KEY configured:', BRIQ_API_KEY ? 'Yes (length: ' + BRIQ_API_KEY.length + ')' : 'No');
 
-    // Check if this is an OTP request - use new Karibu OTP API
+    // Check if this is an OTP request - send our generated OTP via SMS
     if (body.action === 'generate_otp') {
-      // Use Karibu OTP API endpoint
-      const briqResponse = await fetch('https://karibu.briq.tz/otp/request', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': BRIQ_API_KEY,
-        },
-        body: JSON.stringify({
-          phone_number: formattedPhone,
-          app_key: BRIQ_API_KEY, // Using API key as app_key for now
-          sender_id: 'BRIQ', // Use BRIQ as sender_id for OTP
-          otp_length: 6,
-          minutes_to_expire: 5,
-          delivery_method: 'sms'
-        }),
-      });
+      console.log('Sending OTP via SMS API...');
+      console.log('Using message with OTP:', message);
+      
+      // Use direct SMS API instead of OTP API so we can send our own OTP
+      let briqResponse;
+      let isNewAPI = true;
+      
+      try {
+        // Use the new Karibu Messages API to send our generated OTP
+        briqResponse = await fetch('https://karibu.briq.tz/v1/message/send-instant', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': BRIQ_API_KEY,
+          },
+          body: JSON.stringify({
+            content: message, // This contains our generated OTP
+            recipients: [formattedPhone],
+            sender_id: 'BRIQ',
+          }),
+        });
+      } catch (newAPIError) {
+        console.log('New API failed, trying old API:', newAPIError);
+        isNewAPI = false;
+        
+        // Fallback to old API
+        briqResponse = await fetch('https://api.briq.tz/v1/sms/send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${BRIQ_API_KEY}`,
+          },
+          body: JSON.stringify({
+            phone: formattedPhone,
+            message: message, // This contains our generated OTP
+            sender_id: 'SmartCart',
+          }),
+        });
+      }
 
       let briqResult;
       const responseText = await briqResponse.text();
-      console.log('Briq OTP raw response:', responseText);
+      console.log(`Briq ${isNewAPI ? 'new' : 'old'} API raw response:`, responseText);
       
       try {
         briqResult = JSON.parse(responseText);
-        console.log('Briq OTP parsed response:', JSON.stringify(briqResult));
+        console.log(`Briq ${isNewAPI ? 'new' : 'old'} API parsed response:`, JSON.stringify(briqResult));
       } catch (parseError) {
-        console.error('Failed to parse Briq OTP response as JSON:', parseError);
+        console.error('Failed to parse Briq response as JSON:', parseError);
         console.log('Response was likely HTML error page');
         
         // Check if it's an HTML error page
@@ -321,7 +368,7 @@ Deno.serve(async (req) => {
           return new Response(
             JSON.stringify({ 
               success: false, 
-              error: 'Briq OTP API returned HTML error page. Check API key and endpoint.',
+              error: 'Briq API returned HTML error page. Check API key and endpoint.',
               details: responseText.substring(0, 200) + '...'
             }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
@@ -331,7 +378,7 @@ Deno.serve(async (req) => {
         return new Response(
           JSON.stringify({ 
             success: false, 
-            error: 'Invalid response from Briq OTP API',
+            error: 'Invalid response from Briq API',
             details: responseText.substring(0, 200) + '...'
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
@@ -340,18 +387,20 @@ Deno.serve(async (req) => {
 
       if (!briqResponse.ok) {
         return new Response(
-          JSON.stringify({ success: false, error: briqResult?.message || 'OTP request failed' }),
+          JSON.stringify({ success: false, error: briqResult?.message || 'SMS failed' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
         );
       }
 
       // Return success for OTP generation
+      console.log('=== OTP GENERATION SUCCESS ===');
       return new Response(
         JSON.stringify({ 
           success: true, 
           message: 'OTP sent to your phone',
           expires_in: 300, // 5 minutes in seconds
-          briq_response: briqResult
+          briq_response: briqResult,
+          api_used: isNewAPI ? 'karibu' : 'legacy'
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );

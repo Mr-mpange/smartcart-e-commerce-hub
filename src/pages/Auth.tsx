@@ -29,17 +29,48 @@ export default function Auth() {
   const [otpLoading, setOtpLoading] = useState(false);
   const [userPhone, setUserPhone] = useState('');
   const [loginStep, setLoginStep] = useState<'credentials' | 'otp'>('credentials');
+  const [isOtpFlow, setIsOtpFlow] = useState(false);
   const { signIn, signUp, user, userRole, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
+  console.log('Auth component render:', { loginStep, isOtpFlow, otpSent, user: user?.id, userRole });
+
+  // Restore OTP flow state on mount
   useEffect(() => {
-    if (!authLoading && user && userRole) {
+    const isInOtpFlow = localStorage.getItem('otp_flow_active') === 'true';
+    const savedEmail = localStorage.getItem('otp_email');
+    const savedPhone = localStorage.getItem('otp_phone');
+    const savedPassword = localStorage.getItem('otp_password');
+    
+    console.log('Component mounted, checking OTP flow state:', { isInOtpFlow, savedEmail, savedPhone, hasPassword: !!savedPassword });
+    
+    if (isInOtpFlow && savedEmail) {
+      console.log('Restoring OTP flow state');
+      setIsOtpFlow(true);
+      setLoginStep('otp');
+      setEmail(savedEmail);
+      if (savedPassword) {
+        setPassword(savedPassword);
+      }
+      if (savedPhone) {
+        setUserPhone(savedPhone);
+        setOtpSent(true);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    // Check if we're in OTP flow from localStorage
+    const isInOtpFlow = localStorage.getItem('otp_flow_active') === 'true';
+    
+    // Only navigate if we're not in the middle of OTP flow
+    if (!authLoading && user && userRole && !isOtpFlow && !isInOtpFlow) {
       if (userRole === 'admin') navigate('/admin/dashboard');
       else if (userRole === 'vendor') navigate('/vendor/dashboard');
       else if (userRole === 'delivery_rider') navigate('/rider/dashboard');
       else navigate('/');
     }
-  }, [authLoading, user, userRole, navigate]);
+  }, [authLoading, user, userRole, navigate, isOtpFlow]);
 
   const handleSendOtp = async () => {
     if (!email || !password) {
@@ -48,6 +79,8 @@ export default function Auth() {
     }
 
     setOtpLoading(true);
+    console.log('Starting OTP send process...');
+    
     try {
       // First validate credentials
       const { data: authUser, error: authError } = await supabase.auth.signInWithPassword({
@@ -56,6 +89,8 @@ export default function Auth() {
       });
       
       if (authError) throw authError;
+      
+      console.log('Credentials validated, fetching profile...');
       
       // Get user profile to get phone number
       const { data: profile, error: profileError } = await supabase
@@ -76,6 +111,8 @@ export default function Auth() {
         throw new Error('No phone number found for this account. Please contact support.');
       }
 
+      console.log('Profile found, sending OTP...');
+
       // Try consolidated briq-sms Edge Function first, fall back to local OTP
       try {
         const result = await sendOTPSMS(email);
@@ -84,6 +121,8 @@ export default function Auth() {
           setOtpSent(true);
           const maskedPhone = profile.phone.replace(/(\+\d{3})(\d{3})(\d{3})(\d{3})/, '$1***$3$4');
           setUserPhone(maskedPhone);
+          localStorage.setItem('otp_phone', maskedPhone);
+          console.log('OTP sent successfully via Edge Function');
           toast.success('Verification code sent to your registered phone number');
           return;
         } else {
@@ -99,6 +138,8 @@ export default function Auth() {
           setOtpSent(true);
           const maskedPhone = profile.phone.replace(/(\+\d{3})(\d{3})(\d{3})(\d{3})/, '$1***$3$4');
           setUserPhone(maskedPhone);
+          localStorage.setItem('otp_phone', maskedPhone);
+          console.log('OTP sent successfully via local system');
           toast.success(result.message || `Verification code sent to ${maskedPhone}`);
         } else {
           throw new Error(result.error || 'Failed to send OTP');
@@ -106,9 +147,15 @@ export default function Auth() {
       }
       
     } catch (error: any) {
+      console.error('OTP send error:', error);
       toast.error(error.message || 'Failed to send OTP');
       // Reset to credentials step on error
       setLoginStep('credentials');
+      setIsOtpFlow(false);
+      localStorage.removeItem('otp_flow_active');
+      localStorage.removeItem('otp_email');
+      localStorage.removeItem('otp_phone');
+      localStorage.removeItem('otp_password');
       setOtpSent(false);
       setOtp('');
       setUserPhone('');
@@ -125,7 +172,7 @@ export default function Auth() {
 
     setLoading(true);
     try {
-      // Try consolidated briq-sms Edge Function first, fall back to local verification
+      // Try Edge Function verification first, fall back to local verification
       let otpValid = false;
       
       try {
@@ -134,7 +181,7 @@ export default function Auth() {
         if (result.success) {
           otpValid = true;
         } else {
-          throw new Error(result.error || 'Invalid OTP');
+          throw new Error(result.error || 'Edge Function verification failed');
         }
       } catch (edgeFunctionError) {
         console.warn('Edge Function verification failed, using local OTP:', edgeFunctionError);
@@ -163,6 +210,13 @@ export default function Auth() {
 
       toast.success('Login successful!');
       
+      // Mark OTP flow as complete
+      setIsOtpFlow(false);
+      localStorage.removeItem('otp_flow_active');
+      localStorage.removeItem('otp_email');
+      localStorage.removeItem('otp_phone');
+      localStorage.removeItem('otp_password');
+      
       // Wait for auth state to settle before navigating
       await new Promise(resolve => setTimeout(resolve, 1000));
       
@@ -187,6 +241,7 @@ export default function Auth() {
         navigate('/');
       }
     } catch (error: any) {
+      console.error('OTP verification error:', error);
       toast.error(error.message || 'Login failed');
     } finally {
       setLoading(false);
@@ -210,12 +265,24 @@ export default function Auth() {
         // If credentials are valid, sign out immediately and send OTP automatically
         await supabase.auth.signOut();
         
-        // Automatically send OTP and show OTP input
-        setLoginStep('otp');
+        // Set loading to false before switching to OTP step
         setLoading(false);
         
-        // Auto-send OTP
-        await handleSendOtp();
+        // Mark that we're starting OTP flow
+        setIsOtpFlow(true);
+        localStorage.setItem('otp_flow_active', 'true');
+        localStorage.setItem('otp_email', email);
+        localStorage.setItem('otp_password', password);
+        
+        console.log('Setting OTP flow state:', { loginStep: 'otp', isOtpFlow: true });
+        
+        // Switch to OTP step first
+        setLoginStep('otp');
+        
+        // Small delay to ensure UI updates, then auto-send OTP
+        setTimeout(async () => {
+          await handleSendOtp();
+        }, 100);
         return;
       } else {
         if (!fullName.trim()) {
@@ -338,6 +405,13 @@ export default function Auth() {
             </TabsList>
             
             <TabsContent value="login">
+              {/* Debug info - remove in production */}
+              {process.env.NODE_ENV === 'development' && (
+                <div className="mb-2 p-2 bg-gray-100 text-xs">
+                  Debug: loginStep={loginStep}, otpSent={String(otpSent)}, otpLoading={String(otpLoading)}, isOtpFlow={String(isOtpFlow)}
+                </div>
+              )}
+              
               {loginStep === 'credentials' ? (
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="space-y-2">
@@ -367,6 +441,18 @@ export default function Auth() {
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? 'Signing in...' : 'Sign In'}
                   </Button>
+                  
+                  {/* Debug button - remove in production */}
+                  {process.env.NODE_ENV === 'development' && (
+                    <Button 
+                      type="button" 
+                      onClick={() => setLoginStep('otp')} 
+                      variant="outline" 
+                      className="w-full mt-2"
+                    >
+                      Test OTP Step
+                    </Button>
+                  )}
                 </form>
               ) : (
                 <div className="space-y-4">
@@ -423,6 +509,11 @@ export default function Auth() {
                   <Button 
                     onClick={() => {
                       setLoginStep('credentials');
+                      setIsOtpFlow(false);
+                      localStorage.removeItem('otp_flow_active');
+                      localStorage.removeItem('otp_email');
+                      localStorage.removeItem('otp_phone');
+                      localStorage.removeItem('otp_password');
                       setOtpSent(false);
                       setOtp('');
                       setUserPhone('');

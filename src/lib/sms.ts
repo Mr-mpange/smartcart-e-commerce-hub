@@ -84,6 +84,8 @@ export async function verifyOTPSMS(
   otpCode: string
 ): Promise<{ success: boolean; error?: string; message?: string }> {
   try {
+    console.log('Sending OTP verification request:', { email, otpCode });
+    
     const { data, error } = await supabase.functions.invoke('briq-sms', {
       body: {
         action: 'verify_otp',
@@ -91,6 +93,9 @@ export async function verifyOTPSMS(
         otp_code: otpCode,
       },
     });
+
+    console.log('OTP verification response - data:', data);
+    console.log('OTP verification response - error:', error);
 
     if (error) {
       console.error('OTP verification error:', error);
