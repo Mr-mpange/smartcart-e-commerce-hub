@@ -14,6 +14,17 @@ import { ShoppingCart, Store, User } from 'lucide-react';
 import { sendOTP, verifyOTP } from '@/lib/otp';
 import { sendOTPSMS, verifyOTPSMS } from '@/lib/sms';
 
+// Phone number formatting utility
+const formatPhoneNumber = (phone: string): string => {
+  let cleaned = phone.replace(/\D/g, '');
+  if (cleaned.startsWith('0')) {
+    cleaned = '255' + cleaned.slice(1);
+  } else if (!cleaned.startsWith('255') && cleaned.length === 9) {
+    cleaned = '255' + cleaned;
+  }
+  return '+' + cleaned;
+};
+
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
@@ -274,6 +285,13 @@ export default function Auth() {
           return;
         }
         
+        // Validate phone number format
+        const phoneDigits = phone.replace(/\D/g, '');
+        if (phoneDigits.length < 9 || phoneDigits.length > 12) {
+          toast.error('Please enter a valid phone number (e.g., 0712345678 or +255712345678)');
+          return;
+        }
+        
         if (userType === 'vendor' && !businessName.trim()) {
           toast.error('Please enter your business name');
           return;
@@ -291,11 +309,12 @@ export default function Auth() {
           }
         }
         
-        // Update profile with phone number
+        // Update profile with phone number (formatted)
         if (data?.user) {
+          const formattedPhone = formatPhoneNumber(phone);
           await supabase
             .from('profiles')
-            .update({ phone: phone })
+            .update({ phone: formattedPhone })
             .eq('id', data.user.id);
         }
         
@@ -305,6 +324,7 @@ export default function Auth() {
           await new Promise(resolve => setTimeout(resolve, 1000));
           
           try {
+            // Only add vendor role (not customer role)
             const { error: roleError } = await supabase
               .from('user_roles')
               .insert([{ user_id: data.user.id, role: 'vendor' }]);
@@ -319,17 +339,16 @@ export default function Auth() {
                 user_id: data.user.id,
                 business_name: businessName,
                 business_description: businessDescription || null,
-                is_approved: false,
+                is_approved: false, // Requires admin approval
               }]);
 
             if (profileError) {
               console.error('Vendor profile error:', profileError);
             }
             
-            toast.success('Vendor account created! Awaiting admin approval.');
+            toast.success('Vendor account created! Awaiting admin approval before you can start selling.');
           } catch (error) {
             console.error('Post-registration error:', error);
-            // Don't throw here - user is already created, just log the error
             toast.success('Account created! Please contact admin to complete vendor setup.');
           }
         } else {
@@ -341,7 +360,6 @@ export default function Auth() {
                 .insert([{ user_id: data.user.id, role: 'customer' }]);
             } catch (error) {
               console.error('Customer role error:', error);
-              // Don't throw - user is created, role can be added later
             }
           }
           
@@ -532,7 +550,7 @@ export default function Auth() {
                   <Input
                     id="signup-phone"
                     type="tel"
-                    placeholder="0712345678"
+                    placeholder="0712345678 or +255712345678"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     required
@@ -591,7 +609,12 @@ export default function Auth() {
                 
                 {userType === 'vendor' && (
                   <div className="bg-muted p-3 rounded-lg text-sm text-muted-foreground">
-                    Note: Vendor accounts require admin approval before you can start selling.
+                    <div className="font-medium text-foreground mb-1">Vendor Account Requirements:</div>
+                    <ul className="space-y-1 text-xs">
+                      <li>• Admin approval required before selling</li>
+                      <li>• You'll receive vendor role only (not customer)</li>
+                      <li>• Can add products after approval</li>
+                    </ul>
                   </div>
                 )}
 

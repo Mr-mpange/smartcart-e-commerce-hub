@@ -20,7 +20,7 @@
         <div class="test-section info">
             <h3>📋 Test Configuration</h3>
             <p><strong>Function:</strong> briq-sms (consolidated)</p>
-            <p><strong>Test Email:</strong> admin@test.com</p>
+            <p><strong>Test Email:</strong> kilindosaid771@gmail.com</p>
             <p><strong>Expected Phone:</strong> +255683859574</p>
         </div>
 
@@ -50,8 +50,8 @@
     </div>
 
     <script>
-        const SUPABASE_URL = 'https://kdiegxbfuohrbktonkmh.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtkaWVneGJmdW9ocmJrdG9ua21oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQyOTIzMTYsImV4cCI6MjA3OTg2ODMxNn0.EyJWQtTjnTgW4uJcCqFasEn49vT1x0mSsxEz1H4CT1o';
+        const SUPABASE_URL = 'https://qpojzblbodlphwzfpxbi.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwb2p6Ymxib2RscGh3emZweGJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzMTUwODEsImV4cCI6MjA4ODg5MTA4MX0.aPIcSd3-0kcn44OMiVwshassQwA5v0kbUv5Q9kZNAVg';
         
         let testResults = {
             generate: null,
@@ -74,7 +74,7 @@
                     },
                     body: JSON.stringify({
                         action: 'generate_otp',
-                        email: 'admin@test.com'
+                        email: 'kilindosaid771@gmail.com'
                     })
                 });
                 
@@ -146,7 +146,7 @@
                     },
                     body: JSON.stringify({
                         action: 'verify_otp',
-                        email: 'admin@test.com',
+                        email: 'kilindosaid771@gmail.com',
                         otp_code: otp
                     })
                 });

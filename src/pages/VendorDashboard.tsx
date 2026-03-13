@@ -47,7 +47,10 @@ export default function VendorDashboard() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
-  const [vendorProfile, setVendorProfile] = useState<{ business_name: string } | null>(null);
+  const [vendorProfile, setVendorProfile] = useState<{ 
+    business_name: string; 
+    is_approved: boolean;
+  } | null>(null);
   const { user, userRole, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
@@ -91,7 +94,7 @@ export default function VendorDashboard() {
     try {
       const { data, error } = await supabase
         .from('vendor_profiles')
-        .select('business_name')
+        .select('business_name, is_approved')
         .eq('user_id', user.id)
         .single();
 
@@ -156,6 +159,12 @@ export default function VendorDashboard() {
 
     if (!user) {
       toast.error('Please sign in first');
+      return;
+    }
+
+    // Check if vendor is approved
+    if (!vendorProfile?.is_approved) {
+      toast.error('Your vendor account needs admin approval before you can add products');
       return;
     }
 
@@ -295,6 +304,39 @@ export default function VendorDashboard() {
       case 'overview':
         return (
           <div className="space-y-6">
+            {/* Vendor Approval Status Banner */}
+            {vendorProfile && !vendorProfile.is_approved && (
+              <Card className="border-yellow-200 bg-yellow-50">
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-3">
+                    <AlertCircle className="h-5 w-5 text-yellow-600" />
+                    <div>
+                      <h3 className="font-semibold text-yellow-800">Account Pending Approval</h3>
+                      <p className="text-sm text-yellow-700">
+                        Your vendor account is awaiting admin approval. You'll be able to add and manage products once approved.
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {vendorProfile?.is_approved && (
+              <Card className="border-green-200 bg-green-50">
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-3">
+                    <Package className="h-5 w-5 text-green-600" />
+                    <div>
+                      <h3 className="font-semibold text-green-800">Account Approved</h3>
+                      <p className="text-sm text-green-700">
+                        Your vendor account is approved! You can now add and manage products.
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <Card className="hover:shadow-lg transition-shadow">
@@ -346,19 +388,33 @@ export default function VendorDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="flex gap-4">
-                  <Dialog open={isDialogOpen} onOpenChange={(open) => {
-                    setIsDialogOpen(open);
-                    if (!open) {
-                      setEditingProduct(null);
-                      resetForm();
-                    }
-                  }}>
-                    <DialogTrigger asChild>
-                      <Button className="bg-gradient-primary">
+                  {!vendorProfile?.is_approved ? (
+                    <div className="relative">
+                      <Button 
+                        className="bg-gradient-primary opacity-50 cursor-not-allowed"
+                        disabled
+                      >
                         <Plus className="mr-2 h-4 w-4" />
                         Add Product
                       </Button>
-                    </DialogTrigger>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Requires admin approval
+                      </p>
+                    </div>
+                  ) : (
+                    <Dialog open={isDialogOpen} onOpenChange={(open) => {
+                      setIsDialogOpen(open);
+                      if (!open) {
+                        setEditingProduct(null);
+                        resetForm();
+                      }
+                    }}>
+                      <DialogTrigger asChild>
+                        <Button className="bg-gradient-primary">
+                          <Plus className="mr-2 h-4 w-4" />
+                          Add Product
+                        </Button>
+                      </DialogTrigger>
                     <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                       <DialogHeader>
                         <DialogTitle>{editingProduct ? 'Edit Product' : 'Add New Product'}</DialogTitle>
@@ -440,6 +496,7 @@ export default function VendorDashboard() {
                       </form>
                     </DialogContent>
                   </Dialog>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -448,12 +505,46 @@ export default function VendorDashboard() {
       
       case 'products':
         return (
-          <Card>
-            <CardHeader>
-              <CardTitle>Your Products</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {products.length === 0 ? (
+          <div className="space-y-6">
+            {/* Vendor Approval Status for Products */}
+            {vendorProfile && !vendorProfile.is_approved && (
+              <Card className="border-yellow-200 bg-yellow-50">
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-3">
+                    <AlertCircle className="h-5 w-5 text-yellow-600" />
+                    <div>
+                      <h3 className="font-semibold text-yellow-800">Admin Approval Required</h3>
+                      <p className="text-sm text-yellow-700">
+                        You need admin approval before you can add or manage products. Please wait for approval or contact support.
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            <Card>
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <CardTitle>Your Products</CardTitle>
+                  {vendorProfile?.is_approved && (
+                    <Button onClick={() => setIsDialogOpen(true)}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Product
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {!vendorProfile?.is_approved ? (
+                  <div className="text-center py-12">
+                    <AlertCircle className="h-12 w-12 mx-auto text-yellow-500 mb-4" />
+                    <h3 className="text-lg font-semibold mb-2">Approval Required</h3>
+                    <p className="text-muted-foreground mb-4">
+                      Your vendor account needs admin approval before you can manage products
+                    </p>
+                  </div>
+                ) : products.length === 0 ? (
                 <div className="text-center py-12">
                   <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                   <h3 className="text-lg font-semibold mb-2">No products yet</h3>

@@ -75,8 +75,7 @@ Deno.serve(async (req) => {
       console.log('Looking up user profile by email...');
       
       // First, try to find profile by checking auth.users table with service role
-      let profile = null;
-      let userId = null;
+      let profile: { id: string; full_name: string; phone: string } | null = null;
       
       try {
         // Try to get user by email using RPC function or direct query
@@ -97,12 +96,12 @@ Deno.serve(async (req) => {
           for (const prof of profiles) {
             try {
               // Check if this profile ID corresponds to a user with the given email
-              const { data: authUser, error: authError } = await supabase.auth.admin.getUserById(prof.id);
+              const { data: authUser } = await supabase.auth.admin.getUserById(prof.id);
               
               if (authUser && authUser.user && authUser.user.email === body.email) {
                 profile = prof;
-                userId = prof.id;
                 console.log('Found matching profile for email:', body.email);
+                console.log('Profile phone:', prof.phone);
                 break;
               }
             } catch (userCheckError) {
@@ -136,6 +135,10 @@ Deno.serve(async (req) => {
         );
       }
 
+      // Ensure phone number is in correct format
+      const formattedPhone = formatPhoneNumber(profile.phone);
+      console.log('Original phone:', profile.phone, 'Formatted phone:', formattedPhone);
+
       // Generate OTP
       const otp = generateOTP();
       const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
@@ -148,7 +151,7 @@ Deno.serve(async (req) => {
       const { error: otpError } = await supabase
         .from('login_otps')
         .insert([{
-          phone_number: formatPhoneNumber(profile.phone),
+          phone_number: formattedPhone,
           otp_code: otp,
           expires_at: expiresAt.toISOString(),
           user_email: body.email, // Store email for easier verification lookup
@@ -163,7 +166,7 @@ Deno.serve(async (req) => {
       }
 
       console.log('OTP stored successfully');
-      phoneNumber = formatPhoneNumber(profile.phone);
+      phoneNumber = formattedPhone;
       message = `Your SmartCart login OTP is: ${otp}. Valid for 5 minutes. Do not share this code.`;
       
       console.log('Phone number:', phoneNumber);
@@ -219,7 +222,7 @@ Deno.serve(async (req) => {
               error: 'Invalid or expired OTP',
               debug: {
                 otpError: otpError?.message,
-                hasRecord: !!otpRecord
+                hasRecord: !!otpRecords
               }
             }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
@@ -316,7 +319,7 @@ Deno.serve(async (req) => {
       console.log('Using message with OTP:', message);
       
       // Use direct SMS API instead of OTP API so we can send our own OTP
-      let briqResponse;
+      let briqResponse: Response;
       let isNewAPI = true;
       
       try {
@@ -406,7 +409,7 @@ Deno.serve(async (req) => {
       );
     } else {
       // For direct SMS, try the new Karibu Messages API first, fallback to old API
-      let briqResponse;
+      let briqResponse: Response;
       let isNewAPI = true;
       
       try {
