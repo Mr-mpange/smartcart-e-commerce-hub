@@ -97,7 +97,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .select('role')
         .eq('user_id', userId);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching user role:', error);
+        // Don't throw error, just set role to null and continue
+        setUserRole(null);
+        setLoading(false);
+        return;
+      }
 
       const roles = (data ?? []).map((r) => r.role);
 
@@ -109,6 +115,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         newRole = 'vendor';
       } else if (roles.includes('delivery_rider')) {
         newRole = 'delivery_rider';
+      } else if (roles.includes('reseller')) {
+        newRole = 'reseller';
       } else if (roles.includes('customer')) {
         newRole = 'customer';
       }
@@ -116,7 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUserRole(newRole);
       lastFetchedUserId.current = userId;
     } catch (error) {
-      // Error fetching user role - will retry
+      console.error('Error in fetchUserRole:', error);
       setUserRole(null);
     } finally {
       setLoading(false);
@@ -150,7 +158,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      setLoading(true);
+      await supabase.auth.signOut();
+      // Clear all state immediately
+      setUser(null);
+      setSession(null);
+      setUserRole(null);
+      lastFetchedUserId.current = null;
+    } catch (error) {
+      console.error('Error signing out:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

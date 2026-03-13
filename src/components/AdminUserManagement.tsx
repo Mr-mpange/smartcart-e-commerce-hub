@@ -50,14 +50,12 @@ export function AdminUserManagement() {
   const checkAdminPermissions = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      console.log('Current user:', user?.id);
       
       if (user) {
         const { data: roles } = await supabase
           .from('user_roles')
           .select('role')
           .eq('user_id', user.id);
-        console.log('User roles:', roles);
       }
     } catch (error) {
       console.error('Error checking admin permissions:', error);
@@ -118,8 +116,6 @@ export function AdminUserManagement() {
     setActionLoading('create-user');
 
     try {
-      console.log('Creating user with data:', newUserData);
-      
       if (!newUserData.email || !newUserData.password) {
         throw new Error('Email and password are required');
       }
@@ -196,8 +192,6 @@ export function AdminUserManagement() {
     setActionLoading('edit-user');
 
     try {
-      console.log('Updating user:', selectedUser.id, newUserData);
-      
       // Update profile
       const { error: profileError } = await supabase
         .from('profiles')
@@ -214,8 +208,6 @@ export function AdminUserManagement() {
 
       // Update role if changed
       if (newUserData.role !== selectedUser.roles[0]) {
-        console.log('Updating role from', selectedUser.roles[0], 'to', newUserData.role);
-        
         // Delete existing roles
         const { error: deleteRoleError } = await supabase
           .from('user_roles')
@@ -258,8 +250,6 @@ export function AdminUserManagement() {
     setActionLoading(userId);
 
     try {
-      console.log('Deleting user:', userId, userName);
-      
       // Delete user roles first
       const { error: roleError } = await supabase
         .from('user_roles')

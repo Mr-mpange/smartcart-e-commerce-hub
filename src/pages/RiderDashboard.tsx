@@ -57,7 +57,7 @@ export default function RiderDashboard() {
       navigate("/");
       return;
     }
-    if (user) {
+    if (user && userRole === "delivery_rider") {
       fetchOrders();
       const channel = supabase
         .channel("rider-orders")
@@ -76,6 +76,18 @@ export default function RiderDashboard() {
       return () => { supabase.removeChannel(channel); };
     }
   }, [user, userRole, authLoading]);
+
+  // Add timeout to prevent infinite loading
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (!authLoading && user && !userRole) {
+        toast.error('Unable to determine user permissions. Please try logging in again.');
+        navigate('/auth');
+      }
+    }, 5000);
+
+    return () => clearTimeout(timeout);
+  }, [authLoading, user, userRole, navigate]);
 
   const fetchOrders = async () => {
     if (!user) return;

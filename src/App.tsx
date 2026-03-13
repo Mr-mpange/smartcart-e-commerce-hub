@@ -27,6 +27,7 @@ import OrderTracking from "./pages/OrderTracking";
 import AdminDashboard from "./pages/AdminDashboard";
 import Wallet from "./pages/Wallet";
 import RiderDashboard from "./pages/RiderDashboard";
+import ResellerDashboard from "./pages/ResellerDashboard";
 import Wishlist from "./pages/Wishlist";
 
 const queryClient = new QueryClient();
@@ -69,6 +70,7 @@ const App = () => (
               <Route path="/wishlist" element={<ProtectedRoute><Wishlist /></ProtectedRoute>} />
               <Route path="/vendor/dashboard" element={<ProtectedRoute requiredRole="vendor"><VendorDashboard /></ProtectedRoute>} />
               <Route path="/rider/dashboard" element={<ProtectedRoute requiredRole="delivery_rider"><RiderDashboard /></ProtectedRoute>} />
+              <Route path="/reseller/dashboard" element={<ProtectedRoute requiredRole="reseller"><ResellerDashboard /></ProtectedRoute>} />
               <Route path="/admin/dashboard" element={<ProtectedRoute requiredRole="admin"><AdminDashboard /></ProtectedRoute>} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />

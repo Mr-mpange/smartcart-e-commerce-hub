@@ -72,8 +72,14 @@ export const Navbar = () => {
   };
 
   const handleSignOut = async () => {
-    await signOut();
-    navigate('/');
+    try {
+      await signOut();
+      navigate('/');
+    } catch (error) {
+      console.error('Sign out error:', error);
+      // Force navigation even if sign out fails
+      navigate('/');
+    }
   };
 
   return (
@@ -186,6 +192,15 @@ export const Navbar = () => {
                         <DropdownMenuItem onClick={() => navigate('/rider/dashboard')}>
                           <Truck className="mr-2 h-4 w-4" />
                           Rider Dashboard
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                    {userRole === 'reseller' && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => navigate('/reseller/dashboard')}>
+                          <ShoppingCart className="mr-2 h-4 w-4" />
+                          Reseller Dashboard
                         </DropdownMenuItem>
                       </>
                     )}

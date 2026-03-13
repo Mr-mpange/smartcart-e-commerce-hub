@@ -7,10 +7,11 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { ShoppingCart, Store, User } from 'lucide-react';
+import { ShoppingCart, Store, User, Truck } from 'lucide-react';
 import { sendOTP, verifyOTP } from '@/lib/otp';
 import { sendOTPSMS, verifyOTPSMS } from '@/lib/sms';
 
@@ -32,9 +33,12 @@ export default function Auth() {
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [fullName, setFullName] = useState('');
-  const [userType, setUserType] = useState<'customer' | 'vendor'>('customer');
+  const [userType, setUserType] = useState<'customer' | 'vendor' | 'delivery_rider' | 'reseller'>('customer');
   const [businessName, setBusinessName] = useState('');
   const [businessDescription, setBusinessDescription] = useState('');
+  const [vehicleType, setVehicleType] = useState('motorcycle');
+  const [licenseNumber, setLicenseNumber] = useState('');
+  const [areaOfOperation, setAreaOfOperation] = useState('');
   const [loading, setLoading] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [otpLoading, setOtpLoading] = useState(false);
@@ -75,6 +79,7 @@ export default function Auth() {
       if (userRole === 'admin') navigate('/admin/dashboard');
       else if (userRole === 'vendor') navigate('/vendor/dashboard');
       else if (userRole === 'delivery_rider') navigate('/rider/dashboard');
+      else if (userRole === 'reseller') navigate('/reseller/dashboard');
       else navigate('/');
     }
   }, [authLoading, user, userRole, navigate, isOtpFlow, loading]);
@@ -227,6 +232,8 @@ export default function Auth() {
           navigate('/vendor/dashboard');
         } else if (roleList.includes('delivery_rider')) {
           navigate('/rider/dashboard');
+        } else if (roleList.includes('reseller')) {
+          navigate('/reseller/dashboard');
         } else {
           navigate('/');
         }
@@ -296,6 +303,11 @@ export default function Auth() {
           toast.error('Please enter your business name');
           return;
         }
+
+        if (userType === 'reseller' && !businessName.trim()) {
+          toast.error('Please enter your business/shop name');
+          return;
+        }
         
         const { error, data } = await signUp(email, password, fullName);
         if (error) {
@@ -350,6 +362,78 @@ export default function Auth() {
           } catch (error) {
             console.error('Post-registration error:', error);
             toast.success('Account created! Please contact admin to complete vendor setup.');
+          }
+        } else if (userType === 'delivery_rider' && data?.user) {
+          // Create rider profile
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          try {
+            // Add delivery_rider role
+            const { error: roleError } = await supabase
+              .from('user_roles')
+              .insert([{ user_id: data.user.id, role: 'delivery_rider' }]);
+
+            if (roleError && !roleError.message.includes('duplicate')) {
+              console.error('Role error:', roleError);
+            }
+
+            const { error: profileError } = await supabase
+              .from('rider_profiles')
+              .insert([{
+                user_id: data.user.id,
+                full_name: fullName,
+                phone: formatPhoneNumber(phone),
+                vehicle_type: vehicleType,
+                license_number: licenseNumber || null,
+                area_of_operation: areaOfOperation || null,
+                is_approved: false, // Requires admin approval
+              }]);
+
+            if (profileError) {
+              console.error('Rider profile error:', profileError);
+            }
+            
+            toast.success('Rider registration submitted! Awaiting admin approval.');
+          } catch (error) {
+            console.error('Rider registration error:', error);
+            toast.success('Account created! Please contact admin to complete rider setup.');
+          }
+        } else if (userType === 'reseller' && data?.user) {
+          // Create reseller profile
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          try {
+            // Add reseller role
+            const { error: roleError } = await supabase
+              .from('user_roles')
+              .insert([{ user_id: data.user.id, role: 'reseller' }]);
+
+            if (roleError && !roleError.message.includes('duplicate')) {
+              console.error('Role error:', roleError);
+            }
+
+            // Try to create reseller profile, but handle gracefully if table doesn't exist
+            try {
+              const { error: profileError } = await supabase
+                .from('reseller_profiles')
+                .insert([{
+                  user_id: data.user.id,
+                  business_name: businessName,
+                  location: areaOfOperation || null,
+                  is_approved: false, // Requires admin approval
+                }]);
+
+              if (profileError) {
+                console.error('Reseller profile error:', profileError);
+              }
+            } catch (profileError) {
+              console.error('Reseller profile creation failed - table may not exist yet:', profileError);
+            }
+            
+            toast.success('Reseller account created! Please contact admin to complete setup and approval.');
+          } catch (error) {
+            console.error('Reseller registration error:', error);
+            toast.success('Account created! Please contact admin to complete reseller setup.');
           }
         } else {
           // For regular customers, add customer role
@@ -509,7 +593,7 @@ export default function Auth() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-3">
                   <Label>I want to register as:</Label>
-                  <RadioGroup value={userType} onValueChange={(v) => setUserType(v as 'customer' | 'vendor')}>
+                  <RadioGroup value={userType} onValueChange={(v) => setUserType(v as 'customer' | 'vendor' | 'delivery_rider' | 'reseller')}>
                     <div className="flex items-center space-x-2 border rounded-lg p-3 cursor-pointer hover:bg-accent" onClick={() => setUserType('customer')}>
                       <RadioGroupItem value="customer" id="customer" />
                       <Label htmlFor="customer" className="flex items-center gap-2 cursor-pointer flex-1">
@@ -527,6 +611,26 @@ export default function Auth() {
                         <div>
                           <div className="font-medium">Vendor</div>
                           <div className="text-xs text-muted-foreground">Sell products on the platform</div>
+                        </div>
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2 border rounded-lg p-3 cursor-pointer hover:bg-accent" onClick={() => setUserType('delivery_rider')}>
+                      <RadioGroupItem value="delivery_rider" id="delivery_rider" />
+                      <Label htmlFor="delivery_rider" className="flex items-center gap-2 cursor-pointer flex-1">
+                        <Truck className="h-4 w-4" />
+                        <div>
+                          <div className="font-medium">Delivery Rider</div>
+                          <div className="text-xs text-muted-foreground">Deliver orders to customers</div>
+                        </div>
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2 border rounded-lg p-3 cursor-pointer hover:bg-accent" onClick={() => setUserType('reseller')}>
+                      <RadioGroupItem value="reseller" id="reseller" />
+                      <Label htmlFor="reseller" className="flex items-center gap-2 cursor-pointer flex-1">
+                        <ShoppingCart className="h-4 w-4" />
+                        <div>
+                          <div className="font-medium">Reseller (Winga)</div>
+                          <div className="text-xs text-muted-foreground">Resell products with commission</div>
                         </div>
                       </Label>
                     </div>
@@ -583,6 +687,71 @@ export default function Auth() {
                   </>
                 )}
 
+                {userType === 'delivery_rider' && (
+                  <>
+                    <div className="space-y-2">
+                      <Label>Vehicle Type</Label>
+                      <Select
+                        value={vehicleType}
+                        onValueChange={(v) => setVehicleType(v)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="motorcycle">Motorcycle</SelectItem>
+                          <SelectItem value="bicycle">Bicycle</SelectItem>
+                          <SelectItem value="car">Car</SelectItem>
+                          <SelectItem value="van">Van</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="license">License Number</Label>
+                      <Input
+                        id="license"
+                        value={licenseNumber}
+                        onChange={(e) => setLicenseNumber(e.target.value)}
+                        placeholder="Optional"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="area">Area of Operation</Label>
+                      <Input
+                        id="area"
+                        value={areaOfOperation}
+                        onChange={(e) => setAreaOfOperation(e.target.value)}
+                        placeholder="e.g. Dar es Salaam - Kinondoni"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {userType === 'reseller' && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="business-name">Business/Shop Name *</Label>
+                      <Input
+                        id="business-name"
+                        type="text"
+                        placeholder="Your Shop/Business Name"
+                        value={businessName}
+                        onChange={(e) => setBusinessName(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="area">Location/Area</Label>
+                      <Input
+                        id="area"
+                        value={areaOfOperation}
+                        onChange={(e) => setAreaOfOperation(e.target.value)}
+                        placeholder="e.g. Kariakoo Market, Dar es Salaam"
+                      />
+                    </div>
+                  </>
+                )}
+
                 <div className="space-y-2">
                   <Label htmlFor="signup-email">Email</Label>
                   <Input
@@ -614,6 +783,28 @@ export default function Auth() {
                       <li>• Admin approval required before selling</li>
                       <li>• You'll receive vendor role only (not customer)</li>
                       <li>• Can add products after approval</li>
+                    </ul>
+                  </div>
+                )}
+
+                {userType === 'delivery_rider' && (
+                  <div className="bg-muted p-3 rounded-lg text-sm text-muted-foreground">
+                    <div className="font-medium text-foreground mb-1">Rider Account Requirements:</div>
+                    <ul className="space-y-1 text-xs">
+                      <li>• Admin approval required before delivery assignments</li>
+                      <li>• Personal rider dashboard with order tracking</li>
+                      <li>• Google Maps navigation integration</li>
+                    </ul>
+                  </div>
+                )}
+
+                {userType === 'reseller' && (
+                  <div className="bg-muted p-3 rounded-lg text-sm text-muted-foreground">
+                    <div className="font-medium text-foreground mb-1">Reseller (Winga) Account:</div>
+                    <ul className="space-y-1 text-xs">
+                      <li>• Admin approval required before earning commissions</li>
+                      <li>• Resell products with commission structure</li>
+                      <li>• Track earnings and performance</li>
                     </ul>
                   </div>
                 )}
