@@ -150,27 +150,43 @@ const Wallet = () => {
     }
     setTopUpLoading(true);
     try {
-      // Update balance
-      const { error: updateError } = await supabase
-        .from("wallets")
-        .update({ balance: wallet.balance + amount })
-        .eq("id", wallet.id);
-      if (updateError) throw updateError;
+      // Get current session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error('Please sign in to top up wallet');
+        return;
+      }
 
-      // Record transaction
-      await supabase.from("wallet_transactions").insert({
-        wallet_id: wallet.id,
-        type: "top_up",
-        amount,
-        description: "Wallet top-up",
+      // Call create-topup-link edge function
+      const response = await fetch(`${supabase.supabaseUrl}/functions/v1/create-topup-link`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          amount,
+          frontend_url: window.location.origin
+        }),
       });
 
-      toast.success(`TSh ${amount.toLocaleString()} added to wallet`);
-      setTopUpAmount("");
-      setTopUpOpen(false);
-      fetchWalletData();
+      const data = await response.json();
+      console.log('Top-up response:', data);
+
+      if (!response.ok) {
+        throw new Error(data.message || data.error || 'Failed to create top-up link');
+      }
+
+      if (data.success) {
+        toast.success('Redirecting to payment...');
+        // Redirect to payment link
+        window.location.href = data.checkout_url || data.payment_link;
+      } else {
+        throw new Error(data.message || 'Failed to create top-up link');
+      }
     } catch (err: any) {
-      toast.error("Top-up failed");
+      console.error('Top-up error:', err);
+      toast.error(err.message || 'Top-up failed');
     } finally {
       setTopUpLoading(false);
     }

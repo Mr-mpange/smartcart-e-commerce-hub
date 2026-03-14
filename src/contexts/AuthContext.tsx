@@ -43,20 +43,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         authStateRef.current = currentState;
         
-        // Only process significant auth events, ignore INITIAL_SESSION completely
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        // Process auth events
+        if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           setSession(session);
           setUser(session?.user ?? null);
           
           if (session?.user) {
-            // Only fetch role if it's a different user or we don't have a role yet
+            // Only fetch role if it's a different user
             if (lastFetchedUserId.current !== session.user.id) {
               setLoading(true);
               await fetchUserRole(session.user.id);
-            } else if (!userRole) {
-              setLoading(true);
-              await fetchUserRole(session.user.id);
+            } else {
+              // Same user, just set loading to false
+              setLoading(false);
             }
+          } else {
+            setLoading(false);
           }
         } else if (event === 'SIGNED_OUT') {
           setSession(null);
@@ -65,33 +67,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setLoading(false);
           lastFetchedUserId.current = null;
         }
-        // Completely ignore INITIAL_SESSION and other events to prevent loops
       }
     );
-
-    // Check for existing session only once
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        authStateRef.current = { user: session.user, session };
-        setSession(session);
-        setUser(session.user);
-        fetchUserRole(session.user.id);
-      } else {
-        setLoading(false);
-      }
-    });
 
     return () => subscription.unsubscribe();
   }, []);
 
   const fetchUserRole = async (userId: string) => {
     try {
-      // Prevent unnecessary fetches
-      if (lastFetchedUserId.current === userId && userRole) {
-        setLoading(false);
-        return;
-      }
-
       const { data, error } = await supabase
         .from('user_roles')
         .select('role')
@@ -99,7 +82,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (error) {
         console.error('Error fetching user role:', error);
-        // Don't throw error, just set role to null and continue
         setUserRole(null);
         setLoading(false);
         return;
@@ -123,10 +105,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setUserRole(newRole);
       lastFetchedUserId.current = userId;
+      setLoading(false);
     } catch (error) {
       console.error('Error in fetchUserRole:', error);
       setUserRole(null);
-    } finally {
       setLoading(false);
     }
   };
@@ -160,14 +142,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     try {
       setLoading(true);
-      await supabase.auth.signOut();
-      // Clear all state immediately
+      // Clear state first
       setUser(null);
       setSession(null);
       setUserRole(null);
       lastFetchedUserId.current = null;
+      isInitialized.current = false;
+      
+      // Then sign out from Supabase
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('Supabase sign out error:', error);
+      }
+      
+      // Force clear localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('sb-qpojzblbodlphwzfpxbi-auth-token');
+      }
     } catch (error) {
       console.error('Error signing out:', error);
+      // Clear state anyway
+      setUser(null);
+      setSession(null);
+      setUserRole(null);
+      lastFetchedUserId.current = null;
     } finally {
       setLoading(false);
     }

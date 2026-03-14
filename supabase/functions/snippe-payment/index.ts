@@ -1,3 +1,4 @@
+// @ts-ignore
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.86.0';
 
 const corsHeaders = {
@@ -5,7 +6,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-Deno.serve(async (req) => {
+// @ts-ignore
+Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -13,7 +15,9 @@ Deno.serve(async (req) => {
   try {
     // Initialize Supabase client
     const supabaseClient = createClient(
+      // @ts-ignore
       Deno.env.get('SUPABASE_URL') ?? '',
+      // @ts-ignore
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
       {
         global: {
@@ -36,6 +40,7 @@ Deno.serve(async (req) => {
       );
     }
 
+    // @ts-ignore
     const SNIPPE_API_KEY = Deno.env.get('SNIPPE_API_KEY');
     if (!SNIPPE_API_KEY) {
       console.error('SNIPPE_API_KEY environment variable is not configured');
@@ -60,6 +65,7 @@ Deno.serve(async (req) => {
       phone = '255' + phone.substring(1);
     }
 
+    // @ts-ignore
     const webhookUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/snippe-webhook`;
 
     // Split name into first/last

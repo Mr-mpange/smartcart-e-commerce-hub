@@ -13,34 +13,35 @@ export interface PricingValidation {
 
 /**
  * Validates if a reseller price is within allowed limits
+ * RULE: Reseller price MUST be >= vendor's original price (no selling below vendor price)
  */
 export function validateResellerPrice(
   originalPrice: number,
   resellerPrice: number,
   maxMarkupPercentage: number = 0
 ): PricingValidation {
-  const maxAllowedPrice = originalPrice * (1 + (maxMarkupPercentage / 100));
+  // ENFORCEMENT: Reseller cannot sell BELOW vendor price, but can sell at any price above it
+  const minAllowedPrice = originalPrice; // Minimum: vendor price
   const currentMarkup = ((resellerPrice - originalPrice) / originalPrice) * 100;
-  const isValid = resellerPrice <= maxAllowedPrice;
+  const isValid = resellerPrice >= minAllowedPrice;
 
   let message = '';
   if (isValid) {
-    if (currentMarkup > 0) {
-      message = `Valid price with ${currentMarkup.toFixed(1)}% markup`;
-    } else if (currentMarkup === 0) {
-      message = 'Selling at original vendor price';
+    if (resellerPrice === originalPrice) {
+      message = `Selling at original vendor price (TSh ${originalPrice.toLocaleString()})`;
     } else {
-      message = `Discounted price (${Math.abs(currentMarkup).toFixed(1)}% below original)`;
+      const markup = currentMarkup;
+      message = `Selling with ${markup.toFixed(1)}% markup (TSh ${resellerPrice.toLocaleString()})`;
     }
   } else {
-    message = `Price exceeds limit! Maximum allowed: ${maxAllowedPrice.toLocaleString()}`;
+    message = `❌ INVALID: Cannot sell below vendor price! Minimum: TSh ${minAllowedPrice.toLocaleString()}`;
   }
 
   return {
     isValid,
-    maxAllowedPrice,
+    maxAllowedPrice: Infinity, // No upper limit
     currentMarkup,
-    maxMarkup: maxMarkupPercentage,
+    maxMarkup: Infinity, // Unlimited markup allowed
     message
   };
 }
@@ -85,11 +86,12 @@ export function formatPriceValidationMessage(validation: PricingValidation): {
 
 /**
  * Pricing rules for resellers
+ * RULE: Reseller can sell at vendor price or HIGHER (no selling below vendor price)
  */
 export const RESELLER_PRICING_RULES = {
-  DEFAULT_MAX_MARKUP: 0, // 0% - cannot increase price by default
-  ADMIN_MAX_MARKUP: 50, // 50% - admin can set higher limits
-  MIN_PRICE_RATIO: 0.5, // Cannot sell below 50% of original price
+  DEFAULT_MIN_PRICE_RATIO: 1.0, // 100% - cannot sell below vendor price
+  ADMIN_MIN_PRICE_RATIO: 1.0, // 100% - strict enforcement, no override
+  MAX_MARKUP: Infinity, // Unlimited markup allowed
   COMMISSION_RATES: {
     BRONZE: 5,   // 5% commission for new resellers
     SILVER: 10,  // 10% commission for regular resellers

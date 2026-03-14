@@ -3,13 +3,16 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { RiderSidebar } from "@/components/RiderSidebar";
+import { Navbar } from "@/components/Navbar";
 import { PaymentMonitoring } from "@/components/PaymentMonitoring";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
-  Loader2, Truck, Package, CheckCircle2, Clock, MapPin, Phone, User, Navigation,
+  Loader2, Truck, Package, CheckCircle2, Clock, MapPin, Phone, User, Navigation, Plus, ArrowUpRight, ArrowDownLeft, Shield, Lock, TrendingUp,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -51,6 +54,11 @@ export default function RiderDashboard() {
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
+  const [wallet, setWallet] = useState<any>(null);
+  const [walletLoading, setWalletLoading] = useState(false);
+  const [topUpAmount, setTopUpAmount] = useState("");
+  const [topUpOpen, setTopUpOpen] = useState(false);
+  const [topUpLoading, setTopUpLoading] = useState(false);
 
   useEffect(() => {
     if (!authLoading && (!user || userRole !== "delivery_rider")) {
@@ -59,6 +67,7 @@ export default function RiderDashboard() {
     }
     if (user && userRole === "delivery_rider") {
       fetchOrders();
+      fetchWallet();
       const channel = supabase
         .channel("rider-orders")
         .on(
@@ -170,6 +179,79 @@ export default function RiderDashboard() {
       `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`,
       "_blank"
     );
+  };
+
+  const fetchWallet = async () => {
+    if (!user) return;
+    try {
+      setWalletLoading(true);
+      let { data: walletData } = await supabase
+        .from("wallets")
+        .select("id, balance, currency")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (!walletData) {
+        const { data: newWallet } = await supabase
+          .from("wallets")
+          .insert({ user_id: user.id })
+          .select("id, balance, currency")
+          .single();
+        walletData = newWallet;
+      }
+      setWallet(walletData);
+    } catch (err: any) {
+      console.error("Wallet error:", err);
+      toast.error("Failed to load wallet");
+    } finally {
+      setWalletLoading(false);
+    }
+  };
+
+  const handleTopUp = async () => {
+    const amount = parseFloat(topUpAmount);
+    if (!amount || amount <= 0 || !wallet) {
+      toast.error("Enter a valid amount");
+      return;
+    }
+    setTopUpLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error('Please sign in to top up wallet');
+        return;
+      }
+
+      const response = await fetch(`${supabase.supabaseUrl}/functions/v1/create-topup-link`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          amount,
+          frontend_url: window.location.origin
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || data.error || 'Failed to create top-up link');
+      }
+
+      if (data.success) {
+        toast.success('Redirecting to payment...');
+        window.location.href = data.checkout_url || data.payment_link;
+      } else {
+        throw new Error(data.message || 'Failed to create top-up link');
+      }
+    } catch (err: any) {
+      console.error('Top-up error:', err);
+      toast.error(err.message || 'Top-up failed');
+    } finally {
+      setTopUpLoading(false);
+    }
   };
 
   const getStatusVariant = (status: string): "default" | "secondary" | "destructive" | "outline" => {
@@ -382,6 +464,65 @@ export default function RiderDashboard() {
           </div>
         );
 
+      case 'wallet':
+        return (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-bold">My Wallet</h2>
+            
+            {walletLoading ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : wallet ? (
+              <>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardDescription>Available Balance</CardDescription>
+                    <CardTitle className="text-4xl text-primary">
+                      TSh {(wallet?.balance || 0).toLocaleString()}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="flex gap-2 flex-wrap">
+                    <Dialog open={topUpOpen} onOpenChange={setTopUpOpen}>
+                      <DialogTrigger asChild>
+                        <Button>
+                          <Plus className="mr-2 h-4 w-4" />
+                          Top Up
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Top Up Wallet</DialogTitle>
+                          <DialogDescription>Enter the amount to add to your wallet</DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 pt-4">
+                          <Input
+                            type="number"
+                            placeholder="Amount in TSh"
+                            value={topUpAmount}
+                            onChange={(e) => setTopUpAmount(e.target.value)}
+                          />
+                          <div className="flex gap-2">
+                            {[5000, 10000, 50000, 100000].map((amt) => (
+                              <Button key={amt} variant="outline" size="sm" onClick={() => setTopUpAmount(String(amt))}>
+                                {amt.toLocaleString()}
+                              </Button>
+                            ))}
+                          </div>
+                          <Button className="w-full" onClick={handleTopUp} disabled={topUpLoading}>
+                            {topUpLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                            Add TSh {parseFloat(topUpAmount || "0").toLocaleString()}
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </CardContent>
+                </Card>
+              </>
+            ) : null}
+          </div>
+        );
+
       case 'settings':
         return (
           <Card>
@@ -400,23 +541,18 @@ export default function RiderDashboard() {
   };
 
   return (
-    <SidebarProvider>
-      <div className="min-h-screen flex w-full">
-        <RiderSidebar activeTab={activeTab} onTabChange={setActiveTab} />
-        <main className="flex-1 flex flex-col overflow-hidden">
-          <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="flex h-14 items-center gap-4 px-4">
-              <SidebarTrigger />
-              <div className="flex-1">
-                <h1 className="text-lg font-semibold">Rider Dashboard</h1>
-              </div>
+    <>
+      <Navbar hideMainNav={true} />
+      <SidebarProvider>
+        <div className="min-h-screen flex w-full">
+          <RiderSidebar activeTab={activeTab} onTabChange={setActiveTab} />
+          <main className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 overflow-auto p-6">
+              {renderTabContent()}
             </div>
-          </header>
-          <div className="flex-1 overflow-auto p-6">
-            {renderTabContent()}
-          </div>
-        </main>
-      </div>
-    </SidebarProvider>
+          </main>
+        </div>
+      </SidebarProvider>
+    </>
   );
 }

@@ -1,4 +1,4 @@
-import { ShoppingCart, Package, TrendingUp, DollarSign, Wallet, Bell, Settings, BarChart3 } from 'lucide-react';
+import { ShoppingCart, Package, TrendingUp, DollarSign, Wallet, Bell, Settings, BarChart3, LogOut } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -9,6 +9,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import { useAuth } from '@/contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 interface ResellerSidebarProps {
   activeTab: string;
@@ -16,6 +18,18 @@ interface ResellerSidebarProps {
 }
 
 export function ResellerSidebar({ activeTab, onTabChange }: ResellerSidebarProps) {
+  const { signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      navigate('/');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+
   const menuItems = [
     {
       title: 'Overview',
@@ -38,7 +52,7 @@ export function ResellerSidebar({ activeTab, onTabChange }: ResellerSidebarProps
       id: 'commissions',
     },
     {
-      title: 'Payments',
+      title: 'Payment Collection',
       icon: Wallet,
       id: 'payments',
     },
@@ -80,6 +94,12 @@ export function ResellerSidebar({ activeTab, onTabChange }: ResellerSidebarProps
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              <SidebarMenuItem>
+                <SidebarMenuButton onClick={handleLogout} className="text-destructive">
+                  <LogOut className="h-4 w-4" />
+                  <span>Logout</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

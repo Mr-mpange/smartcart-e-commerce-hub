@@ -29,6 +29,7 @@ import Wallet from "./pages/Wallet";
 import RiderDashboard from "./pages/RiderDashboard";
 import ResellerDashboard from "./pages/ResellerDashboard";
 import PaymentPage from "./pages/PaymentPage";
+import AllPaymentLinks from "./pages/AllPaymentLinks";
 import Wishlist from "./pages/Wishlist";
 
 const queryClient = new QueryClient();
@@ -64,7 +65,8 @@ const App = () => (
               <Route path="/checkout" element={<ProtectedRoute><Checkout /></ProtectedRoute>} />
               <Route path="/payment-success" element={<PaymentSuccess />} />
               <Route path="/payment-error" element={<PaymentError />} />
-              <Route path="/pay/:linkId" element={<PaymentPage />} />
+              <Route path="/pay/:slug" element={<PaymentPage />} />
+              <Route path="/all-links" element={<AllPaymentLinks />} />
               <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
               <Route path="/order/:id" element={<OrderTracking />} />
               <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />

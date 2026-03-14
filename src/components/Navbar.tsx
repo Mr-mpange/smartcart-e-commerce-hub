@@ -1,4 +1,4 @@
-import { ShoppingCart, User, Search, Menu, LogOut, Package, LayoutDashboard, Shield, Wallet, Truck, Heart } from "lucide-react";
+import { ShoppingCart, User, Search, Menu, LogOut, Package, LayoutDashboard, Shield, Wallet, Truck, Heart, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -8,11 +8,12 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
-export const Navbar = () => {
+export const Navbar = ({ hideMainNav = false }: { hideMainNav?: boolean }) => {
   const { user, userRole, signOut } = useAuth();
   const navigate = useNavigate();
   const [cartCount, setCartCount] = useState(0);
   const [wishlistCount, setWishlistCount] = useState(0);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const debouncedFetchCounts = useCallback(() => {
@@ -73,12 +74,17 @@ export const Navbar = () => {
 
   const handleSignOut = async () => {
     try {
+      console.log('Starting sign out...');
       await signOut();
-      navigate('/');
+      console.log('Sign out completed, navigating to home');
+      // Add a small delay to ensure state is cleared
+      setTimeout(() => {
+        navigate('/', { replace: true });
+      }, 100);
     } catch (error) {
       console.error('Sign out error:', error);
       // Force navigation even if sign out fails
-      navigate('/');
+      navigate('/', { replace: true });
     }
   };
 
@@ -94,69 +100,79 @@ export const Navbar = () => {
             </Link>
             
             {/* Desktop Navigation */}
-            <div className="hidden md:flex items-center gap-6">
-              <Link to="/products" className="text-sm font-medium hover:text-primary transition-colors">
-                Products
-              </Link>
-              <Link to="/categories" className="text-sm font-medium hover:text-primary transition-colors">
-                Categories
-              </Link>
-              <Link to="/deals" className="text-sm font-medium hover:text-primary transition-colors">
-                Deals
-              </Link>
-              <Link to="/vendors" className="text-sm font-medium hover:text-primary transition-colors">
-                Vendors
-              </Link>
-            </div>
+            {!hideMainNav && (
+              <div className="hidden md:flex items-center gap-6">
+                <Link to="/products" className="text-sm font-medium hover:text-primary transition-colors">
+                  Products
+                </Link>
+                <Link to="/categories" className="text-sm font-medium hover:text-primary transition-colors">
+                  Categories
+                </Link>
+                <Link to="/deals" className="text-sm font-medium hover:text-primary transition-colors">
+                  Deals
+                </Link>
+                <Link to="/vendors" className="text-sm font-medium hover:text-primary transition-colors">
+                  Vendors
+                </Link>
+              </div>
+            )}
           </div>
 
           {/* Search Bar */}
-          <div className="hidden lg:flex flex-1 max-w-md mx-8">
-            <div className="relative w-full">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Search products..."
-                className="pl-10 w-full"
-              />
+          {!hideMainNav && (
+            <div className="hidden lg:flex flex-1 max-w-md mx-8">
+              <div className="relative w-full">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  type="search"
+                  placeholder="Search products..."
+                  className="pl-10 w-full"
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Actions */}
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" className="hidden md:flex">
-              <Search className="h-5 w-5" />
-            </Button>
+            {!hideMainNav && (
+              <Button variant="ghost" size="icon" className="hidden md:flex">
+                <Search className="h-5 w-5" />
+              </Button>
+            )}
             
             {user ? (
               <>
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  className="relative"
-                  onClick={() => navigate('/wishlist')}
-                >
-                  <Heart className="h-5 w-5" />
-                  {wishlistCount > 0 && (
-                    <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs bg-destructive">
-                      {wishlistCount}
-                    </Badge>
-                  )}
-                </Button>
+                {!hideMainNav && (
+                  <>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="relative"
+                      onClick={() => navigate('/wishlist')}
+                    >
+                      <Heart className="h-5 w-5" />
+                      {wishlistCount > 0 && (
+                        <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs bg-destructive">
+                          {wishlistCount}
+                        </Badge>
+                      )}
+                    </Button>
 
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  className="relative"
-                  onClick={() => navigate('/cart')}
-                >
-                  <ShoppingCart className="h-5 w-5" />
-                  {cartCount > 0 && (
-                    <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs">
-                      {cartCount}
-                    </Badge>
-                  )}
-                </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="relative"
+                      onClick={() => navigate('/cart')}
+                    >
+                      <ShoppingCart className="h-5 w-5" />
+                      {cartCount > 0 && (
+                        <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs">
+                          {cartCount}
+                        </Badge>
+                      )}
+                    </Button>
+                  </>
+                )}
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -227,11 +243,135 @@ export const Navbar = () => {
               </Button>
             )}
 
-            <Button variant="ghost" size="icon" className="md:hidden">
-              <Menu className="h-5 w-5" />
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="md:hidden"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            >
+              {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </Button>
           </div>
         </div>
+
+        {/* Mobile Menu */}
+        {mobileMenuOpen && (
+          <div className="md:hidden border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <div className="flex flex-col gap-2 py-4">
+              {!hideMainNav && (
+                <>
+                  <Link 
+                    to="/products" 
+                    className="px-4 py-2 text-sm font-medium hover:bg-accent rounded-md transition-colors"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    Products
+                  </Link>
+                  <Link 
+                    to="/categories" 
+                    className="px-4 py-2 text-sm font-medium hover:bg-accent rounded-md transition-colors"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    Categories
+                  </Link>
+                  <Link 
+                    to="/deals" 
+                    className="px-4 py-2 text-sm font-medium hover:bg-accent rounded-md transition-colors"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    Deals
+                  </Link>
+                  <Link 
+                    to="/vendors" 
+                    className="px-4 py-2 text-sm font-medium hover:bg-accent rounded-md transition-colors"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    Vendors
+                  </Link>
+                </>
+              )}
+              {user && (
+                <>
+                  <div className="border-t my-2"></div>
+                  <Link 
+                    to="/profile" 
+                    className="px-4 py-2 text-sm font-medium hover:bg-accent rounded-md transition-colors flex items-center gap-2"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <User className="h-4 w-4" />
+                    Profile
+                  </Link>
+                  <Link 
+                    to="/orders" 
+                    className="px-4 py-2 text-sm font-medium hover:bg-accent rounded-md transition-colors flex items-center gap-2"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <Package className="h-4 w-4" />
+                    My Orders
+                  </Link>
+                  <Link 
+                    to="/wallet" 
+                    className="px-4 py-2 text-sm font-medium hover:bg-accent rounded-md transition-colors flex items-center gap-2"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <Wallet className="h-4 w-4" />
+                    Wallet
+                  </Link>
+                  {userRole === 'vendor' && (
+                    <Link 
+                      to="/vendor/dashboard" 
+                      className="px-4 py-2 text-sm font-medium hover:bg-accent rounded-md transition-colors flex items-center gap-2"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      <LayoutDashboard className="h-4 w-4" />
+                      Vendor Dashboard
+                    </Link>
+                  )}
+                  {userRole === 'delivery_rider' && (
+                    <Link 
+                      to="/rider/dashboard" 
+                      className="px-4 py-2 text-sm font-medium hover:bg-accent rounded-md transition-colors flex items-center gap-2"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      <Truck className="h-4 w-4" />
+                      Rider Dashboard
+                    </Link>
+                  )}
+                  {userRole === 'reseller' && (
+                    <Link 
+                      to="/reseller/dashboard" 
+                      className="px-4 py-2 text-sm font-medium hover:bg-accent rounded-md transition-colors flex items-center gap-2"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      <ShoppingCart className="h-4 w-4" />
+                      Reseller Dashboard
+                    </Link>
+                  )}
+                  {userRole === 'admin' && (
+                    <Link 
+                      to="/admin/dashboard" 
+                      className="px-4 py-2 text-sm font-medium hover:bg-accent rounded-md transition-colors flex items-center gap-2"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      <Shield className="h-4 w-4" />
+                      Admin Dashboard
+                    </Link>
+                  )}
+                  <button 
+                    onClick={() => {
+                      handleSignOut();
+                      setMobileMenuOpen(false);
+                    }}
+                    className="px-4 py-2 text-sm font-medium hover:bg-accent rounded-md transition-colors flex items-center gap-2 text-left w-full"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Sign Out
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </nav>
   );

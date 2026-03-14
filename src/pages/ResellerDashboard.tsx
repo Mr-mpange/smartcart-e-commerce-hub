@@ -3,9 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { ResellerSidebar } from '@/components/ResellerSidebar';
+import { Navbar } from '@/components/Navbar';
 import { ResellerProductManagement } from '@/components/ResellerProductManagement';
 import { PaymentMonitoring } from '@/components/PaymentMonitoring';
-import { ShoppingCart, DollarSign, TrendingUp, Users, Package, AlertTriangle } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { ShoppingCart, DollarSign, TrendingUp, Users, Package, AlertTriangle, Plus, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -21,6 +25,11 @@ export default function ResellerDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
   const { user, userRole, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const [wallet, setWallet] = useState<any>(null);
+  const [walletLoading, setWalletLoading] = useState(false);
+  const [topUpAmount, setTopUpAmount] = useState("");
+  const [topUpOpen, setTopUpOpen] = useState(false);
+  const [topUpLoading, setTopUpLoading] = useState(false);
 
   useEffect(() => {
     if (!authLoading) {
@@ -37,6 +46,7 @@ export default function ResellerDashboard() {
       
       if (user && (userRole === 'reseller' || userRole === 'admin')) {
         fetchResellerProfile();
+        fetchWallet();
       }
     }
   }, [user, userRole, authLoading, navigate]);
@@ -66,6 +76,79 @@ export default function ResellerDashboard() {
       migration_pending: true
     });
   };
+
+  const fetchWallet = async () => {
+    if (!user) return;
+    try {
+      setWalletLoading(true);
+      let { data: walletData } = await supabase
+        .from("wallets")
+        .select("id, balance, currency")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (!walletData) {
+        const { data: newWallet } = await supabase
+          .from("wallets")
+          .insert({ user_id: user.id })
+          .select("id, balance, currency")
+          .single();
+        walletData = newWallet;
+      }
+      setWallet(walletData);
+    } catch (err: any) {
+      console.error("Wallet error:", err);
+      toast.error("Failed to load wallet");
+    } finally {
+      setWalletLoading(false);
+    }
+  };
+
+  const handleTopUp = async () => {
+    const amount = parseFloat(topUpAmount);
+    if (!amount || amount <= 0 || !wallet) {
+      toast.error("Enter a valid amount");
+      return;
+    }
+    setTopUpLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error('Please sign in to top up wallet');
+        return;
+      }
+
+      const response = await fetch(`${supabase.supabaseUrl}/functions/v1/create-topup-link`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          amount,
+          frontend_url: window.location.origin
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || data.error || 'Failed to create top-up link');
+      }
+
+      if (data.success) {
+        toast.success('Redirecting to payment...');
+        window.location.href = data.checkout_url || data.payment_link;
+      } else {
+        throw new Error(data.message || 'Failed to create top-up link');
+      }
+    } catch (err: any) {
+      console.error('Top-up error:', err);
+      toast.error(err.message || 'Top-up failed');
+    } finally {
+      setTopUpLoading(false);
+    }
+  };
   if (authLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -79,34 +162,7 @@ export default function ResellerDashboard() {
       case 'overview':
         return (
           <div className="space-y-6">
-            <Card className="border-yellow-200 bg-yellow-50">
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-3">
-                  <Package className="h-5 w-5 text-yellow-600" />
-                  <div>
-                    <h3 className="font-semibold text-yellow-800">Database Migration Required</h3>
-                    <p className="text-sm text-yellow-700">
-                      Please apply the reseller system migration to enable full functionality. Run the migration file: 20260313150000_reseller_system_clean.sql
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Price Control Notice */}
-            <Card className="border-blue-200 bg-blue-50">
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-3">
-                  <AlertTriangle className="h-5 w-5 text-blue-600" />
-                  <div>
-                    <h3 className="font-semibold text-blue-800">Pricing Guidelines</h3>
-                    <p className="text-sm text-blue-700">
-                      You cannot sell products above the vendor's original price. Maximum markup allowed: {stats.commissionRate}%
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            {/* Price Control Notice - REMOVED: Now using dynamic pricing rules */}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <Card className="hover:shadow-lg transition-shadow">
@@ -191,18 +247,7 @@ export default function ResellerDashboard() {
         );
 
       case 'products':
-        return (
-          <Card>
-            <CardHeader>
-              <CardTitle>My Products</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground text-center py-8">
-                Product management will be available after applying the database migration.
-              </p>
-            </CardContent>
-          </Card>
-        );
+        return <ResellerProductManagement resellerId={user?.id} />;
 
       case 'sales':
         return (
@@ -247,20 +292,9 @@ export default function ResellerDashboard() {
       case 'payments':
         return (
           <div className="space-y-6">
-            <h2 className="text-2xl font-bold">Payment Collection</h2>
-            <PaymentMonitoring />
-          </div>
-        );
-
-      case 'wallet':
-        return (
-          <div className="space-y-6">
-            <h2 className="text-2xl font-bold">Wallet & Payment Collection</h2>
+            <h2 className="text-2xl font-bold">Payment Collection & Wallet</h2>
             
-            {/* Payment Collection */}
-            <PaymentMonitoring />
-            
-            {/* Wallet Balance */}
+            {/* Commission Wallet */}
             <Card>
               <CardHeader>
                 <CardTitle>Commission Wallet</CardTitle>
@@ -270,6 +304,68 @@ export default function ResellerDashboard() {
                 <p className="text-muted-foreground">Available commission balance</p>
               </CardContent>
             </Card>
+
+            {/* Payment Collection */}
+            <PaymentMonitoring />
+          </div>
+        );
+
+      case 'wallet':
+        return (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-bold">My Wallet</h2>
+            
+            {walletLoading ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : wallet ? (
+              <>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <h3 className="text-sm font-medium text-muted-foreground">Available Balance</h3>
+                    <CardTitle className="text-4xl text-primary">
+                      TSh {(wallet?.balance || 0).toLocaleString()}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="flex gap-2 flex-wrap">
+                    <Dialog open={topUpOpen} onOpenChange={setTopUpOpen}>
+                      <DialogTrigger asChild>
+                        <Button>
+                          <Plus className="mr-2 h-4 w-4" />
+                          Top Up
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Top Up Wallet</DialogTitle>
+                          <DialogDescription>Enter the amount to add to your wallet</DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 pt-4">
+                          <Input
+                            type="number"
+                            placeholder="Amount in TSh"
+                            value={topUpAmount}
+                            onChange={(e) => setTopUpAmount(e.target.value)}
+                          />
+                          <div className="flex gap-2">
+                            {[5000, 10000, 50000, 100000].map((amt) => (
+                              <Button key={amt} variant="outline" size="sm" onClick={() => setTopUpAmount(String(amt))}>
+                                {amt.toLocaleString()}
+                              </Button>
+                            ))}
+                          </div>
+                          <Button className="w-full" onClick={handleTopUp} disabled={topUpLoading}>
+                            {topUpLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                            Add TSh {parseFloat(topUpAmount || "0").toLocaleString()}
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </CardContent>
+                </Card>
+              </>
+            ) : null}
           </div>
         );
 
@@ -303,25 +399,18 @@ export default function ResellerDashboard() {
   };
 
   return (
-    <SidebarProvider>
-      <div className="min-h-screen flex w-full">
-        <ResellerSidebar activeTab={activeTab} onTabChange={setActiveTab} />
-        <main className="flex-1 flex flex-col overflow-hidden">
-          <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="flex h-14 items-center gap-4 px-4">
-              <SidebarTrigger />
-              <div className="flex-1">
-                <h1 className="text-lg font-semibold">
-                  {resellerProfile?.business_name || 'Reseller Dashboard'}
-                </h1>
-              </div>
+    <>
+      <Navbar hideMainNav={true} />
+      <SidebarProvider>
+        <div className="min-h-screen flex w-full">
+          <ResellerSidebar activeTab={activeTab} onTabChange={setActiveTab} />
+          <main className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 overflow-auto p-6">
+              {renderTabContent()}
             </div>
-          </header>
-          <div className="flex-1 overflow-auto p-6">
-            {renderTabContent()}
-          </div>
-        </main>
-      </div>
-    </SidebarProvider>
+          </main>
+        </div>
+      </SidebarProvider>
+    </>
   );
 }

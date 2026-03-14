@@ -10,10 +10,12 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Link as LinkIcon, Plus, ExternalLink, Copy, CheckCircle, XCircle, Clock, DollarSign } from "lucide-react";
+import { Loader2, Link as LinkIcon, Plus, ExternalLink, Copy, CheckCircle, XCircle, Clock, DollarSign, Trash2 } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 interface PaymentLink {
   id: string;
+  slug: string;
   amount: number;
   description: string | null;
   status: string;
@@ -53,7 +55,7 @@ export function PaymentMonitoring() {
       
       let query = supabase
         .from("payment_links")
-        .select("id, amount, description, status, checkout_url, snippe_reference, recipient_name, recipient_phone, created_at, created_by")
+        .select("id, slug, amount, description, status, checkout_url, snippe_reference, recipient_name, recipient_phone, created_at, created_by")
         .order("created_at", { ascending: false })
         .limit(100);
 
@@ -71,6 +73,8 @@ export function PaymentMonitoring() {
 
       console.log('Fetched payment links:', data);
       console.log('Sample link checkout_url:', data?.[0]?.checkout_url);
+      console.log('Sample link slug:', data?.[0]?.slug);
+      console.log('Sample link has slug?:', !!data?.[0]?.slug);
       setLinks(data || []);
 
       const items = data || [];
@@ -93,6 +97,11 @@ export function PaymentMonitoring() {
     if (!amt || amt <= 0) { 
       toast.error("Please enter a valid amount greater than 0"); 
       return; 
+    }
+    
+    if (!recipientPhone || !recipientPhone.trim()) {
+      toast.error("Recipient phone number is required");
+      return;
     }
     
     setCreating(true);
@@ -148,8 +157,21 @@ export function PaymentMonitoring() {
         }
 
         if (responseData?.success) {
-          toast.success("Payment link created successfully!");
+          const shareableUrl = responseData.payment_link_url;
+          const snippeUrl = responseData.checkout_url;
+          
           console.log('Payment link created:', responseData);
+          console.log('Shareable URL:', shareableUrl);
+          console.log('Snippe URL:', snippeUrl);
+          
+          // Show success with shareable link
+          toast.success(`Payment link created! Shareable: ${shareableUrl}`, { duration: 10000 });
+          
+          // Copy shareable link to clipboard
+          if (shareableUrl) {
+            navigator.clipboard.writeText(shareableUrl);
+            toast.info("Shareable link copied to clipboard!", { duration: 5000 });
+          }
           
           // Clear form
           setAmount(""); 
@@ -221,8 +243,20 @@ export function PaymentMonitoring() {
         }
 
         if (data?.success) {
-          toast.success("Payment link created successfully!");
+          const shareableUrl = data.payment_link_url;
+          const snippeUrl = data.checkout_url;
+          
           console.log('Payment link created:', data);
+          console.log('Shareable URL:', shareableUrl);
+          console.log('Snippe URL:', snippeUrl);
+          
+          toast.success(`Payment link created! Shareable: ${shareableUrl}`, { duration: 10000 });
+          
+          // Copy shareable link to clipboard
+          if (shareableUrl) {
+            navigator.clipboard.writeText(shareableUrl);
+            toast.info("Shareable link copied to clipboard!", { duration: 5000 });
+          }
           
           // Clear form
           setAmount(""); 
@@ -262,6 +296,32 @@ export function PaymentMonitoring() {
   const copyLink = (url: string) => {
     navigator.clipboard.writeText(url);
     toast.success("Link copied to clipboard");
+  };
+
+  const handleDeleteLink = async (linkId: string) => {
+    try {
+      const { error } = await supabase
+        .from('payment_links')
+        .delete()
+        .eq('id', linkId);
+
+      if (error) throw error;
+
+      toast.success("Payment link deleted successfully");
+      setLinks(links.filter(l => l.id !== linkId));
+      
+      // Update stats
+      const items = links.filter(l => l.id !== linkId);
+      setStats({
+        total: items.length,
+        active: items.filter(l => l.status === "active").length,
+        paid: items.filter(l => l.status === "paid").length,
+        totalAmount: items.filter(l => l.status === "paid").reduce((s, l) => s + l.amount, 0),
+      });
+    } catch (err: any) {
+      console.error('Error deleting payment link:', err);
+      toast.error("Failed to delete payment link");
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -314,13 +374,14 @@ export function PaymentMonitoring() {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="recipient-phone">Recipient Phone (Optional)</Label>
+                <Label htmlFor="recipient-phone">Recipient Phone (Required) *</Label>
                 <Input 
                   id="recipient-phone"
                   type="tel" 
-                  placeholder="Phone number (optional)" 
+                  placeholder="Phone number (e.g., 255754123456)" 
                   value={recipientPhone} 
                   onChange={e => setRecipientPhone(e.target.value)} 
+                  required
                 />
               </div>
               
@@ -454,29 +515,85 @@ export function PaymentMonitoring() {
                         })}
                       </TableCell>
                       <TableCell>
-                        <div className="flex gap-1">
-                          {link.checkout_url ? (
+                        <div className="flex gap-1 flex-col">
+                          {link.slug && link.slug.trim() ? (
                             <>
+                              <div className="text-xs font-mono bg-blue-50 p-2 rounded">
+                                <div className="text-blue-700 font-semibold">Shareable Link:</div>
+                                <div className="text-blue-600 break-all">
+                                  https://uzanasi.online/pay/{link.slug}
+                                </div>
+                              </div>
                               <Button 
-                                size="icon" 
-                                variant="ghost" 
-                                onClick={() => copyLink(link.checkout_url!)}
-                                title="Copy link"
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => copyLink(`https://uzanasi.online/pay/${link.slug}`)}
+                                className="w-full"
                               >
-                                <Copy className="h-4 w-4" />
+                                <Copy className="h-3 w-3 mr-1" />
+                                Copy Shareable Link
                               </Button>
-                              <Button size="icon" variant="ghost" asChild title="Open link">
-                                <a href={link.checkout_url} target="_blank" rel="noopener">
-                                  <ExternalLink className="h-4 w-4" />
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                asChild
+                              >
+                                <a href={`https://uzanasi.online/pay/${link.slug}`} target="_blank" rel="noopener">
+                                  <ExternalLink className="h-3 w-3 mr-1" />
+                                  Open Link
                                 </a>
                               </Button>
                             </>
                           ) : (
                             <div className="text-xs text-muted-foreground">
-                              <div>No URL</div>
-                              <div className="font-mono text-xs">ID: {link.id.slice(0, 8)}</div>
+                              <div>No slug available</div>
                             </div>
                           )}
+                          {link.checkout_url && (
+                            <Button 
+                              size="sm" 
+                              variant="ghost"
+                              onClick={() => copyLink(link.checkout_url!)}
+                              className="text-xs"
+                            >
+                              <Copy className="h-3 w-3 mr-1" />
+                              Copy Snippe Link
+                            </Button>
+                          )}
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button 
+                                size="sm" 
+                                variant="destructive"
+                                className="w-full"
+                              >
+                                <Trash2 className="h-3 w-3 mr-1" />
+                                Delete
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Payment Link</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to delete this payment link? This action cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <div className="py-4 space-y-2">
+                                <p className="text-sm"><span className="font-medium">Amount:</span> TSh {link.amount.toLocaleString()}</p>
+                                <p className="text-sm"><span className="font-medium">Reference:</span> {link.snippe_reference || link.id.slice(0, 8)}</p>
+                                <p className="text-sm"><span className="font-medium">Slug:</span> {link.slug || 'N/A'}</p>
+                              </div>
+                              <div className="flex gap-3 justify-end">
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction 
+                                  onClick={() => handleDeleteLink(link.id)}
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                >
+                                  Delete
+                                </AlertDialogAction>
+                              </div>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </div>
                       </TableCell>
                     </TableRow>

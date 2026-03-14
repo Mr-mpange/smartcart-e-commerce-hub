@@ -3,8 +3,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Upload, Image, X, Link } from 'lucide-react';
+import { Upload, Image, X, Link, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 
 interface ProductImageUploadProps {
   onImageUpload: (imageUrl: string) => void;
@@ -34,16 +35,42 @@ export function ProductImageUpload({ onImageUpload, currentImage }: ProductImage
 
     setUploading(true);
     try {
-      // For now, we'll use a placeholder service or local URL
-      // In production, you would upload to Supabase Storage or another service
-      
-      // Create a local URL for preview (this won't persist)
-      const localUrl = URL.createObjectURL(file);
-      setImageUrl(localUrl);
-      onImageUpload(localUrl);
+      // Generate unique filename
+      const timestamp = Date.now();
+      const random = Math.random().toString(36).substring(7);
+      const filename = `product-${timestamp}-${random}-${file.name}`;
+
+      // Upload to Supabase Storage
+      const { data, error } = await supabase.storage
+        .from('product-images')
+        .upload(filename, file, {
+          cacheControl: '3600',
+          upsert: false,
+        });
+
+      if (error) {
+        console.error('Upload error:', error);
+        // If bucket doesn't exist, provide helpful message
+        if (error.message?.includes('not found')) {
+          toast.error('Product images bucket not configured. Please contact admin.');
+          return;
+        }
+        toast.error('Failed to upload image: ' + error.message);
+        return;
+      }
+
+      // Get public URL
+      const { data: publicUrlData } = supabase.storage
+        .from('product-images')
+        .getPublicUrl(filename);
+
+      const publicUrl = publicUrlData.publicUrl;
+      setImageUrl(publicUrl);
+      onImageUpload(publicUrl);
       
       toast.success('Image uploaded successfully!');
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Upload error:', error);
       toast.error('Failed to upload image');
     } finally {
       setUploading(false);

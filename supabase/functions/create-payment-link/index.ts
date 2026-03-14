@@ -91,34 +91,58 @@ Deno.serve(async (req: Request) => {
     const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
     const linkId = crypto.randomUUID()
+    
+    // Generate slug for shareable URL
+    const generateSlug = () => {
+      const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+      return Array.from({ length: 8 }, () => 
+        chars[Math.floor(Math.random() * chars.length)]
+      ).join('');
+    };
+    const slug = generateSlug()
 
     console.log('Creating payment link for amount:', amount)
+    console.log('Generated slug:', slug)
 
     const webhookUrl = `${SUPABASE_URL}/functions/v1/snippe-webhook`
     
     // Use provided frontend URL or default to uzanasi.online
     const baseUrl = frontend_url || 'https://uzanasi.online'
 
+    // Format recipient phone if provided
+    let phoneNumber = '255754000000' // Default placeholder
+    if (recipient_phone && recipient_phone.trim()) {
+      let phone = recipient_phone.trim().replace(/[^0-9]/g, '')
+      if (phone.startsWith('0')) {
+        phone = '255' + phone.substring(1)
+      }
+      if (phone.startsWith('255')) {
+        phoneNumber = phone
+      }
+    }
+
     // Create payload for Snippe API using /v1/payments endpoint
-    // We'll use a generic phone number since this is a shareable link
+    // Phone number is REQUIRED by Snippe
     const paymentPayload: any = {
       payment_type: 'mobile',
       details: {
         amount: Math.round(amount),
         currency: 'TZS',
       },
-      phone_number: '255754000000', // Generic number for link creation
+      phone_number: phoneNumber, // REQUIRED - use recipient phone or default
       customer: {
-        firstname: 'Payment',
-        lastname: 'Link',
-        email: user.email || 'link@smartcart.co.tz',
+        firstname: recipient_name ? recipient_name.split(' ')[0] : 'Customer',
+        lastname: recipient_name ? recipient_name.split(' ').slice(1).join(' ') || 'Payment' : 'Payment',
+        email: user.email || 'payment@uzanasi.online',
       },
       webhook_url: webhookUrl,
-      redirect_url: `${baseUrl}/pay/${linkId}`,
+      redirect_url: `${baseUrl}/pay/${slug}`,
       metadata: { 
         payment_link_id: linkId, 
+        payment_link_slug: slug,
         order_id: order_id || null,
-        created_by: user.id 
+        created_by: user.id,
+        is_shareable_link: true
       },
     }
 
@@ -132,7 +156,7 @@ Deno.serve(async (req: Request) => {
     try {
       console.log('Calling Snippe /v1/payments API with payload:', JSON.stringify(paymentPayload, null, 2))
       
-      // Use /v1/payments endpoint - this is what works
+      // Use /v1/payments endpoint
       const snippeResponse = await fetch('https://api.snippe.sh/v1/payments', {
         method: 'POST',
         headers: {
@@ -164,25 +188,33 @@ Deno.serve(async (req: Request) => {
         
         // Create our own shareable payment link in our system
         // This link will be stored in the database and users can share it
-        const paymentLink = `${baseUrl}/pay/${linkId}`
+        const paymentLink = `${baseUrl}/pay/${slug}`
+        
+        // Snippe checkout URL - use /checkout/ endpoint instead of /p/
+        const snippeCheckoutUrl = `https://snippe.me/checkout/${reference}`
 
         console.log('Payment link created:', paymentLink)
         console.log('Snippe reference:', reference)
+        console.log('Snippe checkout URL:', snippeCheckoutUrl)
 
         // Save payment link to database
         const { error: dbError } = await adminClient
           .from('payment_links')
           .insert({
             id: linkId,
+            slug: slug,
             amount: Math.round(amount),
             description: description && description.trim() ? description.trim() : null,
             status: 'active',
-            checkout_url: paymentLink,
+            checkout_url: snippeCheckoutUrl,
             snippe_reference: reference,
             recipient_name: (recipient_name && recipient_name.trim()) ? recipient_name.trim() : null,
             recipient_phone: (recipient_phone && recipient_phone.trim()) ? recipient_phone.trim() : null,
             created_by: user.id,
-            created_at: new Date().toISOString()
+            created_at: new Date().toISOString(),
+            views: 0,
+            payments_count: 0,
+            total_collected: 0
           })
 
         if (dbError) {
@@ -193,10 +225,13 @@ Deno.serve(async (req: Request) => {
         return new Response(JSON.stringify({
           success: true,
           payment_link_id: linkId,
+          slug: slug,
           reference: reference,
           payment_link: paymentLink,
-          payment_link_url: paymentLink,
-          checkout_url: paymentLink,
+          payment_link_url: `${baseUrl}/pay/${slug}`,
+          shareable_link: `${baseUrl}/pay/${slug}`,
+          checkout_url: snippeCheckoutUrl,
+          snippe_reference: reference,
           message: 'Payment link created successfully. Share this link to receive payments.'
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 

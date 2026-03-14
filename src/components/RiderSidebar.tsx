@@ -1,4 +1,4 @@
-import { Truck, Package, CheckCircle2, Clock, BarChart3, Settings, Bell, DollarSign } from 'lucide-react';
+import { Truck, Package, CheckCircle2, Clock, BarChart3, Settings, Bell, DollarSign, Wallet, LogOut } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -9,6 +9,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import { useAuth } from '@/contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 interface RiderSidebarProps {
   activeTab: string;
@@ -16,6 +18,18 @@ interface RiderSidebarProps {
 }
 
 export function RiderSidebar({ activeTab, onTabChange }: RiderSidebarProps) {
+  const { signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      navigate('/');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+
   const menuItems = [
     {
       title: 'Overview',
@@ -36,6 +50,11 @@ export function RiderSidebar({ activeTab, onTabChange }: RiderSidebarProps) {
       title: 'Payments',
       icon: DollarSign,
       id: 'payments',
+    },
+    {
+      title: 'Wallet',
+      icon: Wallet,
+      id: 'wallet',
     },
     {
       title: 'Notifications',
@@ -70,6 +89,12 @@ export function RiderSidebar({ activeTab, onTabChange }: RiderSidebarProps) {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              <SidebarMenuItem>
+                <SidebarMenuButton onClick={handleLogout} className="text-destructive">
+                  <LogOut className="h-4 w-4" />
+                  <span>Logout</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

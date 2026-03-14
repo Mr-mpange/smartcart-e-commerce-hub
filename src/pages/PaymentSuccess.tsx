@@ -5,7 +5,7 @@ import { Footer } from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Package, Loader2, Bell, Smartphone, ShieldCheck } from "lucide-react";
+import { CheckCircle2, Package, Loader2, Bell, Smartphone, ShieldCheck, Copy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -16,48 +16,98 @@ const statusLabels: Record<string, string> = {
   processing: "Processing",
   shipped: "Shipped",
   delivered: "Delivered",
+  paid: "Payment Received",
+  active: "Active",
 };
 
 const PaymentSuccess = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const orderId = searchParams.get("order_id");
+  const slug = searchParams.get("slug");
   const paymentMethod = searchParams.get("method");
   const provider = searchParams.get("provider") || 'Mobile Money';
   const [orderStatus, setOrderStatus] = useState<string>("pending");
+  const [paymentLink, setPaymentLink] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!orderId) return;
+    if (slug) {
+      // Handle payment link
+      fetchPaymentLink();
+    } else if (orderId) {
+      // Handle order
+      fetchOrderStatus();
+    } else {
+      setLoading(false);
+    }
+  }, [orderId, slug]);
 
-    const fetchStatus = async () => {
+  const fetchPaymentLink = async () => {
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      
+      const response = await fetch(
+        `${supabaseUrl}/rest/v1/payment_links?slug=eq.${slug}&select=*`,
+        {
+          method: 'GET',
+          headers: {
+            'apikey': anonKey,
+            'Content-Type': 'application/json',
+          }
+        }
+      );
+
+      const data = await response.json();
+      if (Array.isArray(data) && data.length > 0) {
+        setPaymentLink(data[0]);
+        setOrderStatus(data[0].status);
+      }
+    } catch (err) {
+      console.error('Error fetching payment link:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchOrderStatus = async () => {
+    try {
       const { data } = await supabase
         .from("orders")
         .select("status")
         .eq("id", orderId)
         .single();
       if (data) setOrderStatus(data.status);
-    };
-    fetchStatus();
+    } catch (err) {
+      console.error('Error fetching order:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!orderId && !slug) return;
 
     const channel = supabase
-      .channel(`payment-${orderId}`)
+      .channel(`payment-${orderId || slug}`)
       .on(
         "postgres_changes",
         {
           event: "UPDATE",
           schema: "public",
-          table: "orders",
-          filter: `id=eq.${orderId}`,
+          table: orderId ? "orders" : "payment_links",
+          filter: orderId ? `id=eq.${orderId}` : `slug=eq.${slug}`,
         },
         (payload) => {
           const newStatus = payload.new.status;
           setOrderStatus(newStatus);
-          if (newStatus === "confirmed") {
-            toast.success("Payment confirmed! Your funds are held safely in escrow until delivery.");
+          if (newStatus === "confirmed" || newStatus === "paid") {
+            toast.success("Payment confirmed! Thank you for your payment.");
           } else if (newStatus === "failed") {
             toast.error("Payment failed. Please try again.");
           } else {
-            toast.info(`Order status: ${statusLabels[newStatus] || newStatus}`);
+            toast.info(`Status: ${statusLabels[newStatus] || newStatus}`);
           }
         }
       )
@@ -66,12 +116,25 @@ const PaymentSuccess = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [orderId]);
+  }, [orderId, slug]);
 
-  const isPending = orderStatus === "pending";
-  const isConfirmed = orderStatus === "confirmed" || orderStatus === "processing" || orderStatus === "shipped" || orderStatus === "delivered";
+  const isPending = orderStatus === "pending" || orderStatus === "active";
+  const isConfirmed = orderStatus === "confirmed" || orderStatus === "paid" || orderStatus === "processing" || orderStatus === "shipped" || orderStatus === "delivered";
   const isFailed = orderStatus === "failed";
   const isMobileMoney = paymentMethod === "mobile_money";
+  const isPaymentLink = !!slug;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <Navbar />
+        <main className="flex-1 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -93,28 +156,28 @@ const PaymentSuccess = () => {
                 )}
               </div>
               <div className="space-y-2">
-                <CardTitle className="text-2xl md:text-3xl">
+            <CardTitle className="text-2xl md:text-3xl">
                   {isPending
-                    ? "Confirm Payment on Your Phone"
+                    ? isPaymentLink ? "Waiting for Payment" : "Confirm Payment on Your Phone"
                     : isFailed
                     ? "Payment Failed"
-                    : "Payment Confirmed!"}
+                    : isPaymentLink ? "Payment Received!" : "Payment Confirmed!"}
                 </CardTitle>
                 <CardDescription className="text-base md:text-lg">
-                  {isPending && isMobileMoney
+                  {isPending && isMobileMoney && !isPaymentLink
                     ? `A payment push has been sent to your phone. Enter your ${provider.includes('M-Pesa') ? 'M-Pesa' : provider.includes('Airtel') ? 'Airtel Money' : provider.includes('Tigo') ? 'Tigo Pesa' : provider.includes('Halotel') ? 'Halotel' : 'mobile money'} PIN to authorize.`
                     : isPending
-                    ? "Waiting for payment confirmation..."
+                    ? isPaymentLink ? "Payment is being processed. This page will update automatically." : "Waiting for payment confirmation..."
                     : isFailed
-                    ? "The payment was not completed. You can try again from your orders."
-                    : "Your payment is confirmed. Funds are held in escrow until you receive your order."}
+                    ? "The payment was not completed. You can try again."
+                    : isPaymentLink ? "Thank you! Your payment has been successfully received." : "Your payment is confirmed. Funds are held in escrow until you receive your order."}
                 </CardDescription>
               </div>
             </CardHeader>
 
             <CardContent className="space-y-6">
               {/* Pending: show step-by-step instructions */}
-              {isPending && isMobileMoney && (
+              {isPending && isMobileMoney && !isPaymentLink && (
                 <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 md:p-6 text-left space-y-3">
                   <h3 className="font-semibold flex items-center gap-2">
                     <Smartphone className="h-5 w-5 text-primary" />
@@ -147,12 +210,49 @@ const PaymentSuccess = () => {
               </div>
 
               {/* Escrow info after confirmation */}
-              {isConfirmed && (
+              {isConfirmed && !isPaymentLink && (
                 <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 text-sm text-muted-foreground flex items-start gap-3">
                   <ShieldCheck className="h-5 w-5 text-primary mt-0.5 shrink-0" />
                   <p>
                     Your payment is safely held in <strong>escrow</strong>. The seller will NOT receive the money until you confirm delivery in your orders page.
                   </p>
+                </div>
+              )}
+
+              {/* Payment Link Details */}
+              {isPaymentLink && paymentLink && (
+                <div className="bg-muted/50 rounded-lg p-4 md:p-6 space-y-3">
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">Amount Received</p>
+                    <p className="text-2xl font-bold text-primary">
+                      TSh {paymentLink.amount.toLocaleString()}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">Reference</p>
+                    <p className="font-mono text-sm break-all">{paymentLink.snippe_reference}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-2">Shareable Link</p>
+                    <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        value={`https://uzanasi.online/pay/${slug}`}
+                        readOnly
+                        className="flex-1 px-3 py-2 border rounded text-xs bg-white font-mono"
+                      />
+                      <Button 
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          navigator.clipboard.writeText(`https://uzanasi.online/pay/${slug}`);
+                          toast.success("Link copied!");
+                        }}
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -172,7 +272,7 @@ const PaymentSuccess = () => {
                   className="flex-1"
                   size="lg"
                 >
-                  Continue Shopping
+                  {isPaymentLink ? "Go Home" : "Continue Shopping"}
                 </Button>
                 {orderId && (
                   <Button

@@ -92,11 +92,6 @@ export function ResellerProductManagement({ resellerId }: ResellerProductManagem
     }
   };
 
-  const validatePrice = (originalPrice: number, newPrice: number): boolean => {
-    const validation = validateResellerPrice(originalPrice, newPrice, maxMarkup);
-    return validation.isValid;
-  };
-
   const handleAddProduct = async () => {
     if (!selectedProduct || !resellerPrice) {
       toast.error('Please select a product and enter a price');
@@ -110,8 +105,9 @@ export function ResellerProductManagement({ resellerId }: ResellerProductManagem
     }
 
     const price = parseFloat(resellerPrice);
-    if (!validatePrice(product.price, price)) {
-      toast.error(`Price cannot exceed TSh ${(product.price * (1 + (maxMarkup / 100))).toLocaleString()} (${maxMarkup}% markup limit)`);
+    const validation = validateResellerPrice(product.price, price, maxMarkup);
+    if (!validation.isValid) {
+      toast.error(validation.message);
       return;
     }
 
@@ -144,8 +140,9 @@ export function ResellerProductManagement({ resellerId }: ResellerProductManagem
     if (!editingProduct || !resellerPrice) return;
 
     const price = parseFloat(resellerPrice);
-    if (!validatePrice(editingProduct.original_price, price)) {
-      toast.error(`Price cannot exceed TSh ${(editingProduct.original_price * (1 + (maxMarkup / 100))).toLocaleString()}`);
+    const validation = validateResellerPrice(editingProduct.original_price, price, maxMarkup);
+    if (!validation.isValid) {
+      toast.error(validation.message);
       return;
     }
 
@@ -195,7 +192,7 @@ export function ResellerProductManagement({ resellerId }: ResellerProductManagem
         <div>
           <h3 className="text-lg font-semibold">My Product Catalog</h3>
           <p className="text-sm text-muted-foreground">
-            Add products to resell. Maximum markup allowed: {maxMarkup}%
+            Add products to resell
           </p>
         </div>
         <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
@@ -241,17 +238,17 @@ export function ResellerProductManagement({ resellerId }: ResellerProductManagem
                         const product = products.find(p => p.id === selectedProduct);
                         const price = parseFloat(resellerPrice);
                         if (product && price) {
-                          const maxAllowed = product.price * (1 + (maxMarkup / 100));
-                          const isValid = price <= maxAllowed;
+                          // Use the proper validation function
+                          const validation = validateResellerPrice(product.price, price, maxMarkup);
                           const markup = ((price - product.price) / product.price) * 100;
                           
                           return (
-                            <div className={`flex items-center gap-2 ${isValid ? 'text-green-600' : 'text-red-600'}`}>
-                              {isValid ? <CheckCircle className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+                            <div className={`flex items-center gap-2 ${validation.isValid ? 'text-green-600' : 'text-red-600'}`}>
+                              {validation.isValid ? <CheckCircle className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
                               <span>
-                                {isValid 
+                                {validation.isValid 
                                   ? `Valid price (${markup.toFixed(1)}% markup)`
-                                  : `Exceeds limit! Max: TSh ${maxAllowed.toLocaleString()}`
+                                  : validation.message
                                 }
                               </span>
                             </div>
@@ -384,17 +381,17 @@ export function ResellerProductManagement({ resellerId }: ResellerProductManagem
                   <div className="text-sm">
                     {(() => {
                       const price = parseFloat(resellerPrice);
-                      const maxAllowed = editingProduct.original_price * (1 + (maxMarkup / 100));
-                      const isValid = price <= maxAllowed;
+                      // Use the proper validation function
+                      const validation = validateResellerPrice(editingProduct.original_price, price, maxMarkup);
                       const markup = ((price - editingProduct.original_price) / editingProduct.original_price) * 100;
                       
                       return (
-                        <div className={`flex items-center gap-2 ${isValid ? 'text-green-600' : 'text-red-600'}`}>
-                          {isValid ? <CheckCircle className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+                        <div className={`flex items-center gap-2 ${validation.isValid ? 'text-green-600' : 'text-red-600'}`}>
+                          {validation.isValid ? <CheckCircle className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
                           <span>
-                            {isValid 
+                            {validation.isValid 
                               ? `Valid price (${markup.toFixed(1)}% markup)`
-                              : `Exceeds limit! Max: TSh ${maxAllowed.toLocaleString()}`
+                              : validation.message
                             }
                           </span>
                         </div>
