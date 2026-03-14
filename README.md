@@ -33,12 +33,22 @@ A modern, full-featured e-commerce platform built with React, TypeScript, and Su
 - **Pricing Validation**: Automatic validation of reseller prices
 - **Commission Management**: Automatic commission calculation
 
-### Wallet & Payout
-- **Wallet Balance**: Top-up via Snippe mobile money
-- **Payout System**: Withdraw earnings via Tembo (bulk payouts)
+### Wallet & Payout System
+- **Wallet Balance**: Top-up via Stripe, Snippe, or Bank Transfer
+- **Stripe Integration**: Instant wallet credit on successful payment
+- **Tembo Payouts**: Withdraw earnings via Tembo (B2C mobile money)
+- **Bank Transfers**: Manual bank transfer with admin verification
 - **Approval Workflow**: Large payouts (≥500,000 TSh) require admin approval
 - **Transaction History**: Complete ledger of all transactions
 - **Real-Time Updates**: Instant balance updates on payment confirmation
+- **Multi-Currency Support**: TZS (Tanzanian Shilling) primary currency
+
+### Payment Methods
+- **Stripe**: Credit/debit card payments (instant wallet credit)
+- **Mobile Money**: Snippe USSD push (Tanzania)
+- **Tembo**: Direct mobile wallet payouts (Tanzania)
+- **Bank Transfer**: Manual transfer with admin verification
+- **Wallet Balance**: Use existing wallet balance for purchases
 
 ### Admin Dashboard
 - **User Management**: Manage customers, vendors, resellers, and riders
@@ -170,8 +180,18 @@ supabase/
 - **categories** - Product categories
 - **orders** - Customer orders
 - **order_items** - Items in orders
-- **payment_links** - Payment link records
+- **payment_links** - Payment link records with slug tracking
 - **top_ups** - Wallet top-up transactions
+
+### Wallet System
+- **wallets** - User wallet balances
+- **wallet_transactions** - Transaction history (deposits, withdrawals, payouts)
+- **disputes** - Stripe dispute tracking
+
+### Bank Payment System
+- **bank_accounts** - User bank account information
+- **bank_payments** - Bank transfer payment records
+- **bank_payment_verifications** - Admin verification records
 
 ### Reseller System
 - **reseller_profiles** - Reseller account information
@@ -196,34 +216,146 @@ The app uses Supabase Authentication with email/password and OTP support:
 4. **Role Assignment**: Automatic role assignment based on registration type
 5. **Session Management**: Automatic session handling with refresh tokens
 
+## Wallet Management
+
+### Wallet Functions (src/lib/wallet-management.ts)
+
+```typescript
+// Get or create wallet for user
+getOrCreateWallet(userId: string): Promise<WalletBalance | null>
+
+// Get wallet balance
+getWalletBalance(userId: string): Promise<number | null>
+
+// Add funds from Stripe payment
+addFundsFromStripe(
+  userId: string,
+  amount: number,
+  stripePaymentId: string,
+  description?: string
+): Promise<boolean>
+
+// Deduct funds for payout
+deductFundsForPayout(
+  userId: string,
+  amount: number,
+  payoutId: string,
+  description?: string
+): Promise<{ success: boolean; error?: string }>
+
+// Get transaction history
+getTransactionHistory(userId: string, limit?: number): Promise<WalletTransaction[] | null>
+
+// Update transaction status
+updateTransactionStatus(
+  transactionId: string,
+  status: 'pending' | 'completed' | 'failed'
+): Promise<boolean>
+
+// Get wallet summary
+getWalletSummary(userId: string): Promise<WalletSummary | null>
+```
+
+### Usage Example
+
+```typescript
+import { getOrCreateWallet, addFundsFromStripe, getWalletBalance } from '@/lib/wallet-management';
+
+// Get or create wallet
+const wallet = await getOrCreateWallet(userId);
+
+// Add funds from Stripe
+await addFundsFromStripe(userId, 50000, 'pi_stripe_id', 'Top-up via Stripe');
+
+// Get current balance
+const balance = await getWalletBalance(userId);
+
+// Get transaction history
+const transactions = await getTransactionHistory(userId, 50);
+```
+
 ## Payment System
 
-### Payment Flow
+### Complete Payment Flow
 
-1. **Create Payment Link**
-   - User initiates payment
-   - Edge function creates payment link via Snippe API
-   - Payment link stored in database
-   - User redirected to Snippe checkout
+**Option 1: Stripe Payment**
+1. User clicks "Top Up Wallet"
+2. Redirected to Stripe payment form
+3. Enter card details and complete payment
+4. Stripe webhook confirms payment
+5. Wallet balance updated automatically
+6. User can now withdraw via Tembo
 
-2. **Payment Confirmation**
-   - Snippe sends webhook notification
-   - Edge function processes webhook
-   - Payment status updated in database
-   - User wallet or order updated
+**Option 2: Mobile Money (Snippe)**
+1. User initiates payment
+2. Edge function creates payment link via Snippe API
+3. Payment link stored in database with slug
+4. User redirected to Snippe checkout
+5. Snippe sends webhook notification
+6. Payment status updated in database
+7. User wallet or order updated
 
-3. **Payment Verification**
-   - Payment status checked via Snippe API
-   - Automatic settlement after confirmation
-   - Transaction recorded in ledger
+**Option 3: Bank Transfer**
+1. User selects "Bank Transfer" payment method
+2. Bank account details displayed
+3. User transfers funds to provided account
+4. Admin receives notification
+5. Admin verifies payment in dashboard
+6. Payment marked as verified
+7. Order proceeds or wallet credited
+
+**Option 4: Wallet Balance**
+1. User has existing wallet balance
+2. User selects "Use Wallet Balance"
+3. Amount deducted from wallet
+4. Transaction recorded
+5. Order proceeds immediately
+
+### Payout System
+
+**Payout Flow:**
+1. User requests payout
+2. Phone number formatted to 255XXXXXXXXX
+3. Service code auto-detected based on phone prefix
+4. Account number fetched from Tembo API
+5. Payout payload constructed with all required fields
+6. Request sent to Tembo API with custom headers
+7. USSD push sent to recipient
+8. Recipient receives funds
+9. Transaction recorded in database
+10. Wallet balance updated
+
+**Payout Payload Format:**
+```json
+{
+  "countryCode": "TZ",
+  "accountNo": "9000123456",
+  "serviceCode": "TZ-TIGO-B2C",
+  "amount": 50000,
+  "msisdn": "255712345678",
+  "narration": "Payout Description",
+  "currencyCode": "TZS",
+  "recipientNames": "Recipient Name",
+  "transactionRef": "UNIQUE-REF-ID",
+  "transactionDate": "2026-03-14T11:51:53Z",
+  "callbackUrl": "https://api.example.com/webhook"
+}
+```
 
 ### Phone Number Format
 - Use format: `255XXXXXXXXX` (no `+` prefix)
 - Example: `255754000000` for `+255754000000`
+- Supported formats: `0XXXXXXXXX`, `XXXXXXXXX`, `255XXXXXXXXX`, `+255XXXXXXXXX`
 
 ### Checkout URL
 - Format: `https://snippe.me/checkout/{reference}`
 - Example: `https://snippe.me/checkout/SN17734359215794741`
+
+### Supported Mobile Providers
+- **TIGO**: 255065, 255071 → TZ-TIGO-B2C
+- **VODACOM**: 255074, 255075 → TZ-VODACOM-B2C
+- **HALOTEL**: 255062 → TZ-HALOTEL-B2C
+- **AIRTEL**: Default → TZ-AIRTEL-B2C
 
 ## Reseller System
 
@@ -317,8 +449,24 @@ The `.htaccess` file enables client-side routing for React Router:
 - `POST /functions/v1/snippe-topup-webhook` - Top-up confirmation webhook
 
 ### Payouts
-- `POST /functions/v1/tembo-payout` - Request payout
+- `POST /functions/v1/tembo-payout` - Request payout (send, bulk, approve, reject)
 - `POST /functions/v1/tembo-webhook` - Payout confirmation webhook
+
+### Stripe Integration
+- `POST /functions/v1/stripe-webhook` - Stripe payment webhook
+  - Handles: `payment_intent.succeeded`, `charge.refunded`, `charge.dispute.created`
+
+### Wallet Operations
+- `GET /rest/v1/wallets` - Get user wallet
+- `GET /rest/v1/wallet_transactions` - Get transaction history
+- `POST /rest/v1/wallet_transactions` - Record transaction
+
+### Bank Payments
+- `GET /rest/v1/bank_accounts` - Get user bank accounts
+- `POST /rest/v1/bank_accounts` - Add bank account
+- `GET /rest/v1/bank_payments` - Get bank payment history
+- `POST /rest/v1/bank_payments` - Create bank payment
+- `POST /rest/v1/bank_payment_verifications` - Verify bank payment (admin)
 
 ## Browser Cache Issues
 
@@ -376,17 +524,33 @@ npm run type-check
 # Supabase
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
+VITE_SUPABASE_PROJECT_ID=your-project-id
+VITE_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
 
-# Payment Gateway
-VITE_SNIPPE_API_KEY=your-snippe-key
-VITE_SNIPPE_API_URL=https://api.snippe.me
+# Payment Gateway - Snippe
+SNIPPE_API_KEY=your-snippe-key
 
-# Payout Gateway
-VITE_TEMBO_API_KEY=your-tembo-key
-VITE_TEMBO_API_URL=https://api.tembo.io
+# Payout Gateway - Tembo
+TEMBO_ACCOUNT_ID=your-tembo-account-id
+TEMBO_SECRET=your-tembo-secret
+TEMBO_API_URL=https://api.temboplus.com/tembo/v1
+
+# Stripe (for wallet top-ups)
+STRIPE_PUBLIC_KEY=pk_test_...
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
 
 # Application
 VITE_APP_URL=https://uzanasi.online
+```
+
+### Supabase Secrets (Set in Supabase Dashboard)
+```
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_SECRET_KEY=sk_test_...
+TEMBO_ACCOUNT_ID=your-tembo-account-id
+TEMBO_SECRET=your-tembo-secret
+SNIPPE_API_KEY=your-snippe-key
 ```
 
 ## Support
@@ -396,6 +560,54 @@ For issues or questions:
 2. Review recent documentation files
 3. Check browser console for errors
 4. Review Supabase logs for backend issues
+
+## Deployment
+
+### Production Build
+```bash
+npm run build
+```
+
+### Deploy to Vercel
+```bash
+vercel deploy --prod
+```
+
+### Deploy to Hostinger
+1. Build the app: `npm run build`
+2. Upload `dist/` contents to `public_html/`
+3. Upload `.htaccess` file for React Router routing
+4. Update environment variables in Supabase
+
+### Edge Functions Deployment
+```bash
+npx supabase functions deploy stripe-webhook
+npx supabase functions deploy tembo-payout
+npx supabase functions deploy tembo-payment
+npx supabase functions deploy create-payment-link
+# ... deploy all other functions
+```
+
+### Database Migrations
+```bash
+npx supabase db push
+```
+
+## System Status
+
+**Current Version:** 1.0.0  
+**Status:** ✅ Production Ready  
+**Last Updated:** March 14, 2026
+
+### Deployed Components
+- ✅ Frontend (React + TypeScript)
+- ✅ Backend (Supabase + Edge Functions)
+- ✅ Database (PostgreSQL with RLS)
+- ✅ Payment System (Snippe + Tembo + Stripe)
+- ✅ Wallet System (Deposits, Withdrawals, Payouts)
+- ✅ Bank Payment System (Manual verification)
+- ✅ Reseller System (Dynamic pricing)
+- ✅ Admin Dashboard (Full management)
 
 ## License
 
