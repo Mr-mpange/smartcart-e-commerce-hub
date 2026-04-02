@@ -198,7 +198,7 @@ export default function Cart() {
                     <div className="border-t pt-4">
                       <div className="flex justify-between text-xl font-bold">
                         <span>Total</span>
-                        <span className="text-primary">TSh {(total + 5000).toLocaleString()}</span>
+                        <span className="text-primary">TSh {(total + 500).toLocaleString()}</span>
                       </div>
                     </div>
                   </div>

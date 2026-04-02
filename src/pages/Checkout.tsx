@@ -128,7 +128,7 @@ const Checkout = () => {
   };
 
   const subtotal = cartItems.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
-  const deliveryFee = 5000;
+  const deliveryFee = 500;
   const total = subtotal + deliveryFee;
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {

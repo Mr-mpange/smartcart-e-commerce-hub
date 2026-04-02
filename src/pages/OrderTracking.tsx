@@ -481,11 +481,11 @@ const OrderTracking = () => {
                 </div>
                 <div className="flex justify-between items-center mb-4">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <span>TSh {(order.total_amount - 5000).toLocaleString()}</span>
+                  <span>TSh {(order.total_amount - 500).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between items-center mb-4">
                   <span className="text-muted-foreground">Delivery Fee</span>
-                  <span>TSh 5,000</span>
+                  <span>TSh 500</span>
                 </div>
                 <Separator className="my-4" />
                 <div className="flex justify-between items-center">

@@ -79,6 +79,12 @@ export function PayoutManagement() {
     if (!amt || amt <= 0) { toast.error("Enter a valid amount"); return; }
     if (!phone || phone.length < 9) { toast.error("Enter a valid phone number"); return; }
     
+    // Prevent double submission
+    if (sending) {
+      toast.error("Payout is already being processed. Please wait...");
+      return;
+    }
+    
     setSending(true);
     try {
       // Ensure user is authenticated

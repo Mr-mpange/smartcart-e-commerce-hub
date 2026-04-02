@@ -75,6 +75,54 @@ async function handleSendPayout(body: any, user: any, adminClient: any, supabase
 
   // Generate payout ID
   const payoutId = crypto.randomUUID();
+  console.log('Generated payout ID:', payoutId);
+
+  // Check if a payout with same phone, amount, and recent timestamp already exists (prevent accidental duplicates)
+  const { data: recentPayouts } = await adminClient
+    .from('payouts')
+    .select('id, status, created_at')
+    .eq('recipient_phone', recipient_phone)
+    .eq('amount', amount)
+    .gte('created_at', new Date(Date.now() - 60000).toISOString()) // Last 60 seconds
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  if (recentPayouts && recentPayouts.length > 0) {
+    const recent = recentPayouts[0];
+    console.log('Found recent payout:', recent.id, 'status:', recent.status);
+    
+    // If there's a recent payout in processing or completed state, return it
+    if (recent.status === 'processing' || recent.status === 'completed') {
+      return new Response(JSON.stringify({
+        success: true,
+        payout_id: recent.id,
+        status: recent.status,
+        message: 'Payout already in progress or completed',
+        isDuplicate: true,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+  }
+
+  // Create payout record first to prevent duplicates
+  const { error: insertError } = await adminClient.from('payouts').insert({
+    id: payoutId,
+    requested_by: user.id,
+    recipient_phone,
+    recipient_name: recipient_name || null,
+    amount,
+    description: description || 'SmartCart Payout',
+    wallet_id: wallet_id || null,
+    status: needsApproval ? 'pending_approval' : 'processing',
+    approval_required: needsApproval,
+    payout_type: 'single',
+  });
+
+  if (insertError) {
+    console.error('Failed to create payout record:', insertError);
+    return new Response(JSON.stringify({ error: 'Failed to create payout record' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  console.log('Created payout record:', payoutId);
 
   if (needsApproval) {
     return new Response(JSON.stringify({
@@ -87,6 +135,22 @@ async function handleSendPayout(body: any, user: any, adminClient: any, supabase
 
   // Process immediately
   const result = await processTemboPayment(payoutId, recipient_phone, amount, description || 'SmartCart Payout', adminClient, wallet_id, supabaseUrl);
+  
+  // Update payout record with result
+  if (result.success) {
+    await adminClient.from('payouts').update({
+      status: 'completed',
+      tembo_reference: result.tembo_reference,
+    }).eq('id', payoutId);
+    console.log('Payout completed:', payoutId, 'Tembo ref:', result.tembo_reference);
+  } else {
+    await adminClient.from('payouts').update({
+      status: 'failed',
+      metadata: { error: result.error, details: result.details },
+    }).eq('id', payoutId);
+    console.log('Payout failed:', payoutId, 'Error:', result.error);
+  }
+
   return new Response(JSON.stringify(result), { status: result.success ? 200 : 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 }
 
@@ -115,16 +179,103 @@ async function handleBulkPayout(body: any, user: any, adminClient: any, supabase
 
 async function handleApprovePayout(body: any, user: any, adminClient: any, supabaseUrl: string) {
   const { payout_id } = body;
-  return new Response(JSON.stringify({ success: true, status: 'approved', message: 'Payout approved' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+  // Get the payout record
+  const { data: payout, error: fetchError } = await adminClient
+    .from('payouts')
+    .select('*')
+    .eq('id', payout_id)
+    .single();
+
+  if (fetchError || !payout) {
+    return new Response(JSON.stringify({ error: 'Payout not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  if (payout.status !== 'pending_approval') {
+    return new Response(JSON.stringify({ error: 'Payout is not pending approval' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  // Update status to processing
+  await adminClient.from('payouts').update({
+    status: 'processing',
+    approved_by: user.id,
+    approved_at: new Date().toISOString(),
+  }).eq('id', payout_id);
+
+  // Process the payout
+  const result = await processTemboPayment(
+    payout_id,
+    payout.recipient_phone,
+    payout.amount,
+    payout.description || 'SmartCart Payout',
+    adminClient,
+    payout.wallet_id,
+    supabaseUrl
+  );
+
+  // Update with result
+  if (result.success) {
+    await adminClient.from('payouts').update({
+      status: 'completed',
+      tembo_reference: result.tembo_reference,
+    }).eq('id', payout_id);
+  } else {
+    await adminClient.from('payouts').update({
+      status: 'failed',
+      metadata: { error: result.error, details: result.details },
+    }).eq('id', payout_id);
+  }
+
+  return new Response(JSON.stringify({ success: true, status: result.success ? 'completed' : 'failed', message: result.success ? 'Payout approved and processed' : result.error }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 }
 
 async function handleRejectPayout(body: any, user: any, adminClient: any) {
   const { payout_id, reason } = body;
-  return new Response(JSON.stringify({ success: true, status: 'rejected' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+  // Get the payout record
+  const { data: payout, error: fetchError } = await adminClient
+    .from('payouts')
+    .select('*')
+    .eq('id', payout_id)
+    .single();
+
+  if (fetchError || !payout) {
+    return new Response(JSON.stringify({ error: 'Payout not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  if (payout.status !== 'pending_approval') {
+    return new Response(JSON.stringify({ error: 'Payout is not pending approval' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  // Update status to rejected
+  const { error: updateError } = await adminClient.from('payouts').update({
+    status: 'rejected',
+    rejected_by: user.id,
+    rejected_at: new Date().toISOString(),
+    rejection_reason: reason || 'Rejected by admin',
+  }).eq('id', payout_id);
+
+  if (updateError) {
+    return new Response(JSON.stringify({ error: 'Failed to reject payout' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  return new Response(JSON.stringify({ success: true, status: 'rejected', message: 'Payout rejected' }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 }
 
 async function processTemboPayment(payoutId: string, phone: string, amount: number, description: string, adminClient: any, walletId?: string, supabaseUrl?: string) {
   try {
+    // Check if this payout was already processed
+    const { data: existingPayout } = await adminClient
+      .from('payouts')
+      .select('status, tembo_reference')
+      .eq('id', payoutId)
+      .single();
+
+    if (existingPayout?.status === 'completed' && existingPayout?.tembo_reference) {
+      console.log('Payout already completed:', payoutId);
+      return { success: true, payout_id: payoutId, status: 'completed', tembo_reference: existingPayout.tembo_reference };
+    }
+
     // Format phone
     let formattedPhone = phone.replace(/[^0-9]/g, '');
     if (formattedPhone.startsWith('0')) formattedPhone = '255' + formattedPhone.substring(1);
@@ -205,6 +356,12 @@ async function processTemboPayment(payoutId: string, phone: string, amount: numb
       })
 
       const data = await response.json();
+
+      // Handle duplicate request - if Tembo says it's a duplicate, treat as success
+      if (response.status === 409 && data.reason === 'DUPLICATE_REQUEST') {
+        console.log('Duplicate request detected - payout was already processed');
+        return { success: true, payout_id: payoutId, status: 'completed', tembo_reference: payoutId, isDuplicate: true };
+      }
 
       if (response.ok && data.status === 'success') {
         // Deduct from wallet if specified

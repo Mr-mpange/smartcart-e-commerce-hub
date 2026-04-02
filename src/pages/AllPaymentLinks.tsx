@@ -16,19 +16,13 @@ export default function AllPaymentLinks() {
 
   const fetchAllLinks = async () => {
     try {
-      const response = await fetch(
-        'https://qpojzblbodlphwzfpxbi.supabase.co/rest/v1/payment_links?order=created_at.desc&select=*',
-        {
-          method: 'GET',
-          headers: {
-            'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwb2p6Ymxib2RscGh3emZweGJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzMTUwODEsImV4cCI6MjA4ODg5MTA4MX0.aPIcSd3-0kcn44OMiVwshassQwA5v0kbUv5Q9kZNAVg',
-            'Content-Type': 'application/json',
-          }
-        }
-      );
+      const { data, error } = await supabase
+        .from('payment_links')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-      const data = await response.json();
-      setLinks(Array.isArray(data) ? data : []);
+      if (error) throw error;
+      setLinks(data || []);
     } catch (err) {
       console.error('Error fetching links:', err);
       toast.error('Failed to load payment links');
@@ -106,7 +100,7 @@ export default function AllPaymentLinks() {
                         <td className="py-3 px-4">
                           {link.slug ? (
                             <a 
-                              href={`http://localhost:5173/pay/${link.slug}`}
+                              href={`${window.location.origin}/pay/${link.slug}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-blue-600 hover:underline text-xs"
@@ -123,7 +117,7 @@ export default function AllPaymentLinks() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => copyLink(`http://localhost:5173/pay/${link.slug}`)}
+                                onClick={() => copyLink(`${window.location.origin}/pay/${link.slug}`)}
                               >
                                 <Copy className="h-3 w-3" />
                               </Button>
@@ -133,7 +127,7 @@ export default function AllPaymentLinks() {
                               variant="outline"
                               asChild
                             >
-                              <a href={`http://localhost:5173/pay/${link.slug}`} target="_blank" rel="noopener">
+                              <a href={`${window.location.origin}/pay/${link.slug}`} target="_blank" rel="noopener">
                                 <ExternalLink className="h-3 w-3" />
                               </a>
                             </Button>

@@ -1,3 +1,4 @@
+// @ts-ignore
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -5,6 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+// @ts-ignore
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -14,7 +16,9 @@ Deno.serve(async (req) => {
     const payload = await req.json();
     console.log('Snippe webhook received:', JSON.stringify(payload));
 
+    // @ts-ignore
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    // @ts-ignore
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
