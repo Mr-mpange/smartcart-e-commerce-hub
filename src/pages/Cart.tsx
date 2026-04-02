@@ -191,14 +191,10 @@ export default function Cart() {
                       <span>Subtotal ({cartItems.length} items)</span>
                       <span>TSh {total.toLocaleString()}</span>
                     </div>
-                    <div className="flex justify-between text-muted-foreground">
-                      <span>Delivery</span>
-                      <span>TSh 5,000</span>
-                    </div>
                     <div className="border-t pt-4">
                       <div className="flex justify-between text-xl font-bold">
                         <span>Total</span>
-                        <span className="text-primary">TSh {(total + 500).toLocaleString()}</span>
+                        <span className="text-primary">TSh {total.toLocaleString()}</span>
                       </div>
                     </div>
                   </div>

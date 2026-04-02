@@ -128,8 +128,7 @@ const Checkout = () => {
   };
 
   const subtotal = cartItems.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
-  const deliveryFee = 500;
-  const total = subtotal + deliveryFee;
+  const total = subtotal;
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData({
@@ -277,15 +276,15 @@ const Checkout = () => {
           return;
         }
       } else {
-        // Cash on delivery
+        // Cash on delivery - confirm order and navigate immediately
         await supabase
           .from('orders')
           .update({ status: 'confirmed' })
           .eq('id', order.id);
 
         await supabase.from('cart_items').delete().eq('user_id', user?.id);
-        toast.success("Order placed! Funds held in escrow until delivery.");
-        navigate(`/payment-success?order_id=${order.id}`);
+        toast.success("Order placed successfully! Pay cash upon delivery.");
+        navigate(`/payment-success?order_id=${order.id}&method=cash_on_delivery`);
       }
     } catch (error: any) {
       console.error('Checkout error:', error);
@@ -508,11 +507,6 @@ const Checkout = () => {
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Subtotal</span>
                     <span className="font-medium">TSh {subtotal.toLocaleString()}</span>
-                  </div>
-                  
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Delivery Fee</span>
-                    <span className="font-medium">TSh {deliveryFee.toLocaleString()}</span>
                   </div>
                   
                   <Separator />
