@@ -176,7 +176,7 @@ export default function PaymentPage() {
 
   const isExpired = paymentLink.expires_at && new Date(paymentLink.expires_at) < new Date();
   const isPaid = paymentLink.status === 'paid';
-  const paymentUrl = `https://uzanasi.online/pay/${slug}`;
+  const paymentUrl = paymentLink.checkout_url || `https://snippe.me/checkout/${paymentLink.snippe_reference}`;
 
   const handleProceedToPayment = () => {
     if (!phoneNumber || !phoneNumber.trim()) {

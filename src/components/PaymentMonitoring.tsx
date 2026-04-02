@@ -99,10 +99,6 @@ export function PaymentMonitoring() {
       return; 
     }
     
-    if (!recipientPhone || !recipientPhone.trim()) {
-      toast.error("Recipient phone number is required");
-      return;
-    }
     
     setCreating(true);
     try {
@@ -343,91 +339,68 @@ export function PaymentMonitoring() {
           <DialogTrigger asChild>
             <Button><Plus className="mr-2 h-4 w-4" />Create Payment Link</Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Create Payment Link</DialogTitle>
+              <DialogTitle className="text-xl">Create Payment Link</DialogTitle>
               <DialogDescription>
-                Generate a payment link to collect money from customers via mobile money.
+                Generate a shareable link to collect payments via mobile money.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 pt-4">
-              <div className="space-y-2">
-                <Label htmlFor="amount">Amount (TSh) *</Label>
-                <Input 
+            <div className="space-y-4 pt-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="amount">Amount (TSh) <span className="text-destructive">*</span></Label>
+                <Input
                   id="amount"
-                  type="number" 
-                  placeholder="Enter amount in TSh" 
-                  value={amount} 
+                  type="number"
+                  placeholder="e.g. 50000"
+                  value={amount}
                   onChange={e => setAmount(e.target.value)}
-                  required
                 />
               </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="recipient-name">Recipient Name (Optional)</Label>
-                <Input 
-                  id="recipient-name"
-                  placeholder="Customer name (optional)" 
-                  value={recipientName} 
-                  onChange={e => setRecipientName(e.target.value)} 
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="recipient-phone">Recipient Phone (Required) *</Label>
-                <Input 
-                  id="recipient-phone"
-                  type="tel" 
-                  placeholder="Phone number (e.g., 255754123456)" 
-                  value={recipientPhone} 
-                  onChange={e => setRecipientPhone(e.target.value)} 
-                  required
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="description">Description (Optional)</Label>
-                <Textarea 
-                  id="description"
-                  placeholder="Payment description (optional)" 
-                  value={description} 
-                  onChange={e => setDescription(e.target.value)} 
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label>Quick Amount Selection</Label>
-                <div className="flex gap-2 flex-wrap">
-                  {[10000, 50000, 100000, 500000, 1000000].map(a => (
-                    <Button 
-                      key={a} 
-                      variant="outline" 
-                      size="sm" 
-                      type="button"
-                      onClick={() => setAmount(String(a))}
-                    >
-                      TSh {a.toLocaleString()}
-                    </Button>
-                  ))}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="recipient-name">Customer Name</Label>
+                  <Input
+                    id="recipient-name"
+                    placeholder="Optional"
+                    value={recipientName}
+                    onChange={e => setRecipientName(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="recipient-phone">Phone Number</Label>
+                  <Input
+                    id="recipient-phone"
+                    type="tel"
+                    placeholder="e.g. 0754123456"
+                    value={recipientPhone}
+                    onChange={e => setRecipientPhone(e.target.value)}
+                  />
                 </div>
               </div>
-              
-              <Button 
-                className="w-full" 
-                onClick={handleCreateLink} 
+
+              <div className="space-y-1.5">
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  placeholder="What is this payment for? (optional)"
+                  value={description}
+                  onChange={e => setDescription(e.target.value)}
+                  rows={2}
+                />
+              </div>
+
+              <Button
+                className="w-full"
+                onClick={handleCreateLink}
                 disabled={creating || !amount || parseFloat(amount) <= 0}
                 type="button"
               >
                 {creating ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Creating Link...
-                  </>
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating...</>
                 ) : (
-                  <>
-                    <LinkIcon className="mr-2 h-4 w-4" />
-                    Generate Payment Link
-                  </>
+                  <><LinkIcon className="mr-2 h-4 w-4" />Generate Payment Link</>
                 )}
               </Button>
             </div>
@@ -515,60 +488,19 @@ export function PaymentMonitoring() {
                         })}
                       </TableCell>
                       <TableCell>
-                        <div className="flex gap-1 flex-col">
-                          {link.slug && link.slug.trim() ? (
-                            <>
-                              <div className="text-xs font-mono bg-blue-50 p-2 rounded">
-                                <div className="text-blue-700 font-semibold">Shareable Link:</div>
-                                <div className="text-blue-600 break-all">
-                                  https://uzanasi.online/pay/{link.slug}
-                                </div>
-                              </div>
-                              <Button 
-                                size="sm" 
-                                variant="outline"
-                                onClick={() => copyLink(`https://uzanasi.online/pay/${link.slug}`)}
-                                className="w-full"
-                              >
-                                <Copy className="h-3 w-3 mr-1" />
-                                Copy Shareable Link
-                              </Button>
-                              <Button 
-                                size="sm" 
-                                variant="outline"
-                                asChild
-                              >
-                                <a href={`https://uzanasi.online/pay/${link.slug}`} target="_blank" rel="noopener">
-                                  <ExternalLink className="h-3 w-3 mr-1" />
-                                  Open Link
-                                </a>
-                              </Button>
-                            </>
-                          ) : (
-                            <div className="text-xs text-muted-foreground">
-                              <div>No slug available</div>
-                            </div>
-                          )}
-                          {link.checkout_url && (
-                            <Button 
-                              size="sm" 
-                              variant="ghost"
-                              onClick={() => copyLink(link.checkout_url!)}
-                              className="text-xs"
-                            >
-                              <Copy className="h-3 w-3 mr-1" />
-                              Copy Snippe Link
-                            </Button>
-                          )}
+                        <div className="flex gap-1 items-center">
+                          <Button
+                            size="icon"
+                            variant="outline"
+                            title="Copy payment link"
+                            onClick={() => copyLink(link.checkout_url || `https://snippe.me/checkout/${link.snippe_reference}`)}
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                          </Button>
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <Button 
-                                size="sm" 
-                                variant="destructive"
-                                className="w-full"
-                              >
-                                <Trash2 className="h-3 w-3 mr-1" />
-                                Delete
+                              <Button size="icon" variant="destructive" title="Delete">
+                                <Trash2 className="h-3.5 w-3.5" />
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
@@ -578,14 +510,9 @@ export function PaymentMonitoring() {
                                   Are you sure you want to delete this payment link? This action cannot be undone.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
-                              <div className="py-4 space-y-2">
-                                <p className="text-sm"><span className="font-medium">Amount:</span> TSh {link.amount.toLocaleString()}</p>
-                                <p className="text-sm"><span className="font-medium">Reference:</span> {link.snippe_reference || link.id.slice(0, 8)}</p>
-                                <p className="text-sm"><span className="font-medium">Slug:</span> {link.slug || 'N/A'}</p>
-                              </div>
-                              <div className="flex gap-3 justify-end">
+                              <div className="flex gap-3 justify-end pt-2">
                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction 
+                                <AlertDialogAction
                                   onClick={() => handleDeleteLink(link.id)}
                                   className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                                 >
