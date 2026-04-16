@@ -118,10 +118,12 @@ const PaymentSuccess = () => {
     };
   }, [orderId, slug]);
 
-  const isPending = orderStatus === "pending" || orderStatus === "active";
-  const isConfirmed = orderStatus === "confirmed" || orderStatus === "paid" || orderStatus === "processing" || orderStatus === "shipped" || orderStatus === "delivered";
+  const isPending = (orderStatus === "pending" || orderStatus === "active") && paymentMethod !== "cash_on_delivery";
+  const isConfirmed = orderStatus === "confirmed" || orderStatus === "paid" || orderStatus === "processing" || orderStatus === "shipped" || orderStatus === "delivered" || paymentMethod === "cash_on_delivery";
   const isFailed = orderStatus === "failed";
+  const isCashOnDelivery = paymentMethod === "cash_on_delivery";
   const isMobileMoney = paymentMethod === "mobile_money";
+
   const isPaymentLink = !!slug;
 
   if (loading) {
@@ -145,7 +147,7 @@ const PaymentSuccess = () => {
           <Card className="text-center">
             <CardHeader className="space-y-4 pb-8">
               <div className="mx-auto">
-                {isPending ? (
+                {isPending && !isCashOnDelivery ? (
                   <Smartphone className="h-16 w-16 md:h-20 md:w-20 text-primary animate-pulse" />
                 ) : isFailed ? (
                   <div className="h-16 w-16 md:h-20 md:w-20 rounded-full bg-destructive/10 flex items-center justify-center mx-auto">
@@ -157,14 +159,18 @@ const PaymentSuccess = () => {
               </div>
               <div className="space-y-2">
             <CardTitle className="text-2xl md:text-3xl">
-                  {isPending
+                  {isCashOnDelivery
+                    ? "Order Placed!"
+                    : isPending
                     ? isPaymentLink ? "Waiting for Payment" : "Confirm Payment on Your Phone"
                     : isFailed
                     ? "Payment Failed"
                     : isPaymentLink ? "Payment Received!" : "Payment Confirmed!"}
                 </CardTitle>
                 <CardDescription className="text-base md:text-lg">
-                  {isPending && isMobileMoney && !isPaymentLink
+                  {isCashOnDelivery
+                    ? "Your order has been placed. Please have cash ready when your order is delivered."
+                    : isPending && isMobileMoney && !isPaymentLink
                     ? `A payment push has been sent to your phone. Enter your ${provider.includes('M-Pesa') ? 'M-Pesa' : provider.includes('Airtel') ? 'Airtel Money' : provider.includes('Tigo') ? 'Tigo Pesa' : provider.includes('Halotel') ? 'Halotel' : 'mobile money'} PIN to authorize.`
                     : isPending
                     ? isPaymentLink ? "Payment is being processed. This page will update automatically." : "Waiting for payment confirmation..."

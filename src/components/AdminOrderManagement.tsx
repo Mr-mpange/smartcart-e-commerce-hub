@@ -86,7 +86,7 @@ export function AdminOrderManagement() {
       }
 
       setOrders(
-        (data || []).map((o) => ({
+        (data || []).filter(Boolean).map((o) => ({
           ...o,
           customer_name: profilesMap.get(o.user_id) || "Unknown",
         }))

@@ -380,7 +380,9 @@ const Checkout = () => {
                         required
                       />
                       <p className="text-xs text-muted-foreground">
-                        Payment request will be sent to this number
+                        {formData.paymentMethod === 'cash_on_delivery' 
+                          ? 'We will contact you on this number for delivery'
+                          : 'Payment request will be sent to this number'}
                       </p>
                     </div>
 

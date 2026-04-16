@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -45,7 +45,13 @@ export default function Auth() {
   const [userPhone, setUserPhone] = useState('');
   const [loginStep, setLoginStep] = useState<'credentials' | 'otp'>('credentials');
   const [isOtpFlow, setIsOtpFlow] = useState(false);
+  const isOtpFlowRef = useRef(false);
   const { signIn, signUp, user, userRole, loading: authLoading } = useAuth();
+
+  const setOtpFlowActive = (value: boolean) => {
+    isOtpFlowRef.current = value;
+    setIsOtpFlow(value);
+  };
   const navigate = useNavigate();
 
   // Restore OTP flow state on mount
@@ -56,7 +62,7 @@ export default function Auth() {
     const savedPassword = localStorage.getItem('otp_password');
     
     if (isInOtpFlow && savedEmail) {
-      setIsOtpFlow(true);
+      setOtpFlowActive(true);
       setLoginStep('otp');
       setEmail(savedEmail);
       if (savedPassword) {
@@ -70,12 +76,11 @@ export default function Auth() {
   }, []);
 
   useEffect(() => {
-    // Check if we're in OTP flow from localStorage
-    const isInOtpFlow = localStorage.getItem('otp_flow_active') === 'true';
+    // Check if we're in OTP flow from localStorage or ref (ref is synchronous, avoids race condition)
+    const isInOtpFlow = isOtpFlowRef.current || localStorage.getItem('otp_flow_active') === 'true';
     
     // Only navigate if we're not in the middle of OTP flow and not currently logging in
-    // This prevents conflicts with manual navigation after OTP login
-    if (!authLoading && user && userRole && !isOtpFlow && !isInOtpFlow && !loading) {
+    if (!authLoading && user && userRole && !isInOtpFlow && !loading) {
       if (userRole === 'admin') navigate('/admin/dashboard');
       else if (userRole === 'vendor') navigate('/vendor/dashboard');
       else if (userRole === 'delivery_rider') navigate('/rider/dashboard');
@@ -152,7 +157,7 @@ export default function Auth() {
       toast.error(error.message || 'Failed to send OTP');
       // Reset to credentials step on error
       setLoginStep('credentials');
-      setIsOtpFlow(false);
+      setOtpFlowActive(false);
       localStorage.removeItem('otp_flow_active');
       localStorage.removeItem('otp_email');
       localStorage.removeItem('otp_phone');
@@ -210,7 +215,7 @@ export default function Auth() {
       toast.success('Login successful!');
       
       // Mark OTP flow as complete
-      setIsOtpFlow(false);
+      setOtpFlowActive(false);
       localStorage.removeItem('otp_flow_active');
       localStorage.removeItem('otp_email');
       localStorage.removeItem('otp_phone');
@@ -268,7 +273,7 @@ export default function Auth() {
         setLoading(false);
         
         // Mark that we're starting OTP flow
-        setIsOtpFlow(true);
+        setOtpFlowActive(true);
         localStorage.setItem('otp_flow_active', 'true');
         localStorage.setItem('otp_email', email);
         localStorage.setItem('otp_password', password);
@@ -571,7 +576,7 @@ export default function Auth() {
                   <Button 
                     onClick={() => {
                       setLoginStep('credentials');
-                      setIsOtpFlow(false);
+                      setOtpFlowActive(false);
                       localStorage.removeItem('otp_flow_active');
                       localStorage.removeItem('otp_email');
                       localStorage.removeItem('otp_phone');

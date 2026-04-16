@@ -31,6 +31,7 @@ import ResellerDashboard from "./pages/ResellerDashboard";
 import PaymentPage from "./pages/PaymentPage";
 import AllPaymentLinks from "./pages/AllPaymentLinks";
 import Wishlist from "./pages/Wishlist";
+import { WhatsAppFloat } from "@/components/WhatsAppFloat";
 
 const queryClient = new QueryClient();
 
@@ -82,6 +83,7 @@ const App = () => (
           </NotificationProvider>
         </AuthProvider>
       </BrowserRouter>
+      <WhatsAppFloat />
     </TooltipProvider>
   </QueryClientProvider>
 );

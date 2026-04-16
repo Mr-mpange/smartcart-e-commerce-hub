@@ -411,7 +411,7 @@ const Orders = () => {
                         {/* Order Items */}
                         <div className="space-y-3">
                           <h4 className="font-semibold">Order Items</h4>
-                          {order.order_items?.map((item) => (
+                          {order.order_items?.filter(Boolean).map((item) => (
                             <div key={item.id} className="flex items-center gap-4 p-3 bg-muted/50 rounded-lg">
                               <img
                                 src={item.product?.image_url || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=80'}

@@ -145,23 +145,26 @@ export function VendorOrderManagement() {
       const productsMap = new Map(productsData?.map(p => [p.id, p]) || []);
       const profilesMap = new Map(profilesData?.map(p => [p.id, p]) || []);
 
-      const vendorOrders: VendorOrder[] = orderItems.map(item => {
-        const order = ordersMap.get(item.order_id);
-        const product = productsMap.get(item.product_id || '');
-        const profile = profilesMap.get(order?.user_id || '');
+      const vendorOrders: VendorOrder[] = orderItems
+        .map(item => {
+          const order = ordersMap.get(item.order_id);
+          if (!order) return null; // skip items whose order couldn't be fetched
+          const product = productsMap.get(item.product_id || '');
+          const profile = profilesMap.get(order?.user_id || '');
 
-        return {
-          order_item_id: item.id,
-          order_id: item.order_id,
-          product_id: item.product_id,
-          quantity: item.quantity,
-          price: item.price,
-          created_at: item.created_at,
-          order: order as Order,
-          product: product || null,
-          customer_name: profile?.full_name || 'Customer',
-        };
-      });
+          return {
+            order_item_id: item.id,
+            order_id: item.order_id,
+            product_id: item.product_id,
+            quantity: item.quantity,
+            price: item.price,
+            created_at: item.created_at,
+            order: order as Order,
+            product: product || null,
+            customer_name: profile?.full_name || 'Customer',
+          };
+        })
+        .filter(Boolean) as VendorOrder[];
 
       setOrders(vendorOrders);
     } catch (error: any) {
