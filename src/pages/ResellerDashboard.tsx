@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { ResellerSidebar } from '@/components/ResellerSidebar';
-import { Navbar } from '@/components/Navbar';
 import { ResellerProductManagement } from '@/components/ResellerProductManagement';
 import { PaymentMonitoring } from '@/components/PaymentMonitoring';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -30,6 +29,16 @@ export default function ResellerDashboard() {
   const [topUpAmount, setTopUpAmount] = useState("");
   const [topUpOpen, setTopUpOpen] = useState(false);
   const [topUpLoading, setTopUpLoading] = useState(false);
+  const tabTitles: Record<string, string> = {
+    overview: 'Overview',
+    products: 'My Products',
+    sales: 'Sales History',
+    commissions: 'Commissions',
+    payments: 'Payment Collection',
+    wallet: 'Wallet',
+    notifications: 'Notifications',
+    settings: 'Settings',
+  };
 
   useEffect(() => {
     if (!authLoading) {
@@ -165,46 +174,46 @@ export default function ResellerDashboard() {
             {/* Price Control Notice - REMOVED: Now using dynamic pricing rules */}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <Card className="hover:shadow-lg transition-shadow">
+              <Card className="hover:shadow-lg transition-all duration-200 border-l-4 border-l-blue-500">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm font-medium">Total Sales</CardTitle>
                   <ShoppingCart className="h-4 w-4 text-primary" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold">TSh {stats.totalSales.toLocaleString()}</div>
+                  <div className="text-3xl font-bold text-blue-600">TSh {stats.totalSales.toLocaleString()}</div>
                   <p className="text-xs text-muted-foreground">Products sold</p>
                 </CardContent>
               </Card>
               
-              <Card className="hover:shadow-lg transition-shadow">
+              <Card className="hover:shadow-lg transition-all duration-200 border-l-4 border-l-green-500">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm font-medium">Commission Earned</CardTitle>
                   <DollarSign className="h-4 w-4 text-primary" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold">TSh {stats.totalCommission.toLocaleString()}</div>
+                  <div className="text-3xl font-bold text-green-600">TSh {stats.totalCommission.toLocaleString()}</div>
                   <p className="text-xs text-muted-foreground">{stats.commissionRate}% commission rate</p>
                 </CardContent>
               </Card>
               
-              <Card className="hover:shadow-lg transition-shadow">
+              <Card className="hover:shadow-lg transition-all duration-200 border-l-4 border-l-purple-500">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm font-medium">Commission Rate</CardTitle>
                   <TrendingUp className="h-4 w-4 text-primary" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold">{stats.commissionRate}%</div>
+                  <div className="text-3xl font-bold text-purple-600">{stats.commissionRate}%</div>
                   <p className="text-xs text-muted-foreground">Per sale commission</p>
                 </CardContent>
               </Card>
               
-              <Card className="hover:shadow-lg transition-shadow">
+              <Card className="hover:shadow-lg transition-all duration-200 border-l-4 border-l-orange-500">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm font-medium">Customers</CardTitle>
                   <Users className="h-4 w-4 text-primary" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold">{stats.totalCustomers}</div>
+                  <div className="text-3xl font-bold text-orange-600">{stats.totalCustomers}</div>
                   <p className="text-xs text-muted-foreground">Referred customers</p>
                 </CardContent>
               </Card>
@@ -399,18 +408,28 @@ export default function ResellerDashboard() {
   };
 
   return (
-    <>
-      <Navbar hideMainNav={true} />
+    <div className="min-h-screen bg-background flex flex-col">
       <SidebarProvider>
-        <div className="min-h-screen flex w-full">
+        <div className="flex-1 flex w-full">
           <ResellerSidebar activeTab={activeTab} onTabChange={setActiveTab} />
-          <main className="flex-1 flex flex-col overflow-hidden">
-            <div className="flex-1 overflow-auto p-6">
+          <main className="flex-1 flex flex-col min-w-0">
+            <header className="h-12 flex items-center justify-between border-b px-4">
+              <div className="flex items-center gap-4">
+                <SidebarTrigger />
+                <h1 className="text-lg font-semibold">{tabTitles[activeTab] || 'Reseller Dashboard'}</h1>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">
+                  Welcome, {user?.email?.split('@')[0] || 'Reseller'}
+                </span>
+              </div>
+            </header>
+            <div className="flex-1 p-4 md:p-8 overflow-auto">
               {renderTabContent()}
             </div>
           </main>
         </div>
       </SidebarProvider>
-    </>
+    </div>
   );
 }

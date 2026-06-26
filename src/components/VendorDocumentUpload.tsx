@@ -46,6 +46,26 @@ export function VendorDocumentUpload({ vendorId, readonly = false }: VendorDocum
     fetchDocuments();
   }, [vendorId]);
 
+  const getStoragePath = (documentUrl: string) => {
+    if (!documentUrl) return null;
+    if (!documentUrl.startsWith('http')) return documentUrl;
+
+    const markers = [
+      '/storage/v1/object/public/vendor-documents/',
+      '/storage/v1/object/sign/vendor-documents/',
+      '/storage/v1/object/authenticated/vendor-documents/',
+    ];
+
+    for (const marker of markers) {
+      const index = documentUrl.indexOf(marker);
+      if (index >= 0) {
+        return decodeURIComponent(documentUrl.slice(index + marker.length).split('?')[0]);
+      }
+    }
+
+    return null;
+  };
+
   const fetchDocuments = async () => {
     try {
       const { data, error } = await supabase
@@ -93,17 +113,13 @@ export function VendorDocumentUpload({ vendorId, readonly = false }: VendorDocum
       if (uploadError) throw uploadError;
 
       // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('vendor-documents')
-        .getPublicUrl(fileName);
-
       // Save document record
       const { error: insertError } = await supabase
         .from('vendor_documents')
         .insert([{
           vendor_id: vendorId,
           document_type: selectedType,
-          document_url: publicUrl,
+          document_url: fileName,
           document_name: file.name,
           file_size: file.size,
           mime_type: file.type,
@@ -117,20 +133,49 @@ export function VendorDocumentUpload({ vendorId, readonly = false }: VendorDocum
       fetchDocuments();
     } catch (error: any) {
       console.error('Upload error:', error);
-      toast.error('Failed to upload document');
+      toast.error(error.message || 'Failed to upload document');
     } finally {
       setUploading(false);
     }
   };
 
-  const handleDelete = async (documentId: string) => {
+  const openDocument = async (doc: VendorDocument) => {
+    try {
+      const storagePath = getStoragePath(doc.document_url);
+      if (!storagePath) {
+        window.open(doc.document_url, '_blank', 'noopener,noreferrer');
+        return;
+      }
+
+      const { data, error } = await supabase.storage
+        .from('vendor-documents')
+        .createSignedUrl(storagePath, 60);
+
+      if (error) throw error;
+      window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+    } catch (error: any) {
+      console.error('Open document error:', error);
+      toast.error(error.message || 'Failed to open document');
+    }
+  };
+
+  const handleDelete = async (doc: VendorDocument) => {
     if (!confirm('Are you sure you want to delete this document?')) return;
 
     try {
+      const storagePath = getStoragePath(doc.document_url);
+      if (storagePath) {
+        const { error: storageError } = await supabase.storage
+          .from('vendor-documents')
+          .remove([storagePath]);
+
+        if (storageError) throw storageError;
+      }
+
       const { error } = await supabase
         .from('vendor_documents')
         .delete()
-        .eq('id', documentId);
+        .eq('id', doc.id);
 
       if (error) throw error;
       toast.success('Document deleted');
@@ -238,7 +283,7 @@ export function VendorDocumentUpload({ vendorId, readonly = false }: VendorDocum
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => window.open(doc.document_url, '_blank')}
+                    onClick={() => openDocument(doc)}
                   >
                     View
                   </Button>
@@ -246,7 +291,7 @@ export function VendorDocumentUpload({ vendorId, readonly = false }: VendorDocum
                     <Button
                       variant="destructive"
                       size="sm"
-                      onClick={() => handleDelete(doc.id)}
+                      onClick={() => handleDelete(doc)}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>

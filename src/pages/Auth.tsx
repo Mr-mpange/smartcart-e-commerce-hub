@@ -14,6 +14,8 @@ import { toast } from 'sonner';
 import { ShoppingCart, Store, User, Truck } from 'lucide-react';
 import { sendOTP, verifyOTP } from '@/lib/otp';
 import { sendOTPSMS, verifyOTPSMS } from '@/lib/sms';
+import { getDashboardRoute } from '@/lib/role-routing';
+import { AppRole, getPrimaryRole } from '@/lib/user-role';
 
 // Phone number formatting utility
 const formatPhoneNumber = (phone: string): string => {
@@ -81,11 +83,7 @@ export default function Auth() {
     
     // Only navigate if we're not in the middle of OTP flow and not currently logging in
     if (!authLoading && user && userRole && !isInOtpFlow && !loading) {
-      if (userRole === 'admin') navigate('/admin/dashboard');
-      else if (userRole === 'vendor') navigate('/vendor/dashboard');
-      else if (userRole === 'delivery_rider') navigate('/rider/dashboard');
-      else if (userRole === 'reseller') navigate('/reseller/dashboard');
-      else navigate('/');
+      navigate(getDashboardRoute(userRole), { replace: true });
     }
   }, [authLoading, user, userRole, navigate, isOtpFlow, loading]);
 
@@ -229,21 +227,9 @@ export default function Auth() {
           .eq('user_id', signInData.user.id);
         
         const roleList = roles?.map(r => r.role) || [];
-        
-        // Navigate immediately based on role
-        if (roleList.includes('admin')) {
-          navigate('/admin/dashboard');
-        } else if (roleList.includes('vendor')) {
-          navigate('/vendor/dashboard');
-        } else if (roleList.includes('delivery_rider')) {
-          navigate('/rider/dashboard');
-        } else if (roleList.includes('reseller')) {
-          navigate('/reseller/dashboard');
-        } else {
-          navigate('/');
-        }
+        navigate(getDashboardRoute(getPrimaryRole(roleList)), { replace: true });
       } else {
-        navigate('/');
+        navigate('/', { replace: true });
       }
     } catch (error: any) {
       toast.error(error.message || 'Login failed');
@@ -314,7 +300,7 @@ export default function Auth() {
           return;
         }
         
-        const { error, data } = await signUp(email, password, fullName);
+        const { error, data } = await signUp(email, password, fullName, userType as AppRole);
         if (error) {
           // Handle specific error types
           if (error.message?.includes('rate limit') || error.message?.includes('email rate')) {
@@ -335,21 +321,11 @@ export default function Auth() {
             .eq('id', data.user.id);
         }
         
-        // If registering as vendor, create vendor profile
+        // Role is assigned once by the signup trigger using the supplied metadata.
         if (userType === 'vendor' && data?.user) {
-          // Wait a moment for the user session to be established
           await new Promise(resolve => setTimeout(resolve, 1000));
           
           try {
-            // Only add vendor role (not customer role)
-            const { error: roleError } = await supabase
-              .from('user_roles')
-              .insert([{ user_id: data.user.id, role: 'vendor' }]);
-
-            if (roleError && !roleError.message.includes('duplicate')) {
-              console.error('Role error:', roleError);
-            }
-
             const { error: profileError } = await supabase
               .from('vendor_profiles')
               .insert([{
@@ -369,19 +345,9 @@ export default function Auth() {
             toast.success('Account created! Please contact admin to complete vendor setup.');
           }
         } else if (userType === 'delivery_rider' && data?.user) {
-          // Create rider profile
           await new Promise(resolve => setTimeout(resolve, 1000));
           
           try {
-            // Add delivery_rider role
-            const { error: roleError } = await supabase
-              .from('user_roles')
-              .insert([{ user_id: data.user.id, role: 'delivery_rider' }]);
-
-            if (roleError && !roleError.message.includes('duplicate')) {
-              console.error('Role error:', roleError);
-            }
-
             const { error: profileError } = await supabase
               .from('rider_profiles')
               .insert([{
@@ -404,19 +370,9 @@ export default function Auth() {
             toast.success('Account created! Please contact admin to complete rider setup.');
           }
         } else if (userType === 'reseller' && data?.user) {
-          // Create reseller profile
           await new Promise(resolve => setTimeout(resolve, 1000));
           
           try {
-            // Add reseller role
-            const { error: roleError } = await supabase
-              .from('user_roles')
-              .insert([{ user_id: data.user.id, role: 'reseller' }]);
-
-            if (roleError && !roleError.message.includes('duplicate')) {
-              console.error('Role error:', roleError);
-            }
-
             // Try to create reseller profile, but handle gracefully if table doesn't exist
             try {
               const { error: profileError } = await supabase
@@ -441,17 +397,6 @@ export default function Auth() {
             toast.success('Account created! Please contact admin to complete reseller setup.');
           }
         } else {
-          // For regular customers, add customer role
-          if (data?.user) {
-            try {
-              await supabase
-                .from('user_roles')
-                .insert([{ user_id: data.user.id, role: 'customer' }]);
-            } catch (error) {
-              console.error('Customer role error:', error);
-            }
-          }
-          
           toast.success('Account created successfully!');
           
           // Show email confirmation message if email confirmation is enabled

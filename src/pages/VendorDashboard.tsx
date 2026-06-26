@@ -26,6 +26,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 export default function VendorDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
   const [vendorProfile, setVendorProfile] = useState<{ 
+    id: string;
     business_name: string; 
     is_approved: boolean;
   } | null>(null);
@@ -90,7 +91,7 @@ export default function VendorDashboard() {
     try {
       const { data, error } = await supabase
         .from('vendor_profiles')
-        .select('business_name, is_approved')
+        .select('id, business_name, is_approved')
         .eq('user_id', user.id)
         .single();
 
@@ -633,7 +634,15 @@ export default function VendorDashboard() {
         return (
           <div className="space-y-6">
             <h2 className="text-2xl font-bold">Documents</h2>
-            <VendorDocumentUpload vendorId={user?.id} />
+            {vendorProfile?.id ? (
+              <VendorDocumentUpload vendorId={vendorProfile.id} />
+            ) : (
+              <Card>
+                <CardContent className="pt-6 text-sm text-muted-foreground">
+                  Vendor profile not found yet. Complete vendor registration first to upload documents.
+                </CardContent>
+              </Card>
+            )}
           </div>
         );
 

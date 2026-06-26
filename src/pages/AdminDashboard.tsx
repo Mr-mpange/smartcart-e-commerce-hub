@@ -245,6 +245,7 @@ const AdminDashboard = () => {
         password: newVendorData.password,
         user_metadata: {
           full_name: newVendorData.fullName,
+          role: 'vendor',
         },
         email_confirm: true, // Auto-confirm email for admin-created users
       });
@@ -256,16 +257,6 @@ const AdminDashboard = () => {
 
       if (!authData.user) {
         throw new Error('User creation failed - no user returned');
-      }
-
-      // Add vendor role
-      const { error: roleError } = await supabase
-        .from('user_roles')
-        .insert([{ user_id: authData.user.id, role: 'vendor' }]);
-
-      if (roleError) {
-        console.error('Role creation error:', roleError);
-        // Continue anyway - role can be added later
       }
 
       // Create vendor profile

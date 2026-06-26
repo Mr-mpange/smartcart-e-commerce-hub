@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -15,7 +15,8 @@ import { toast } from 'sonner';
 export function RiderRegistration() {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { user } = useAuth();
+  const { user, userRole } = useAuth();
+  const [riderProfile, setRiderProfile] = useState<any>(null);
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
@@ -25,6 +26,29 @@ export function RiderRegistration() {
     licenseNumber: '',
     areaOfOperation: '',
   });
+
+  useEffect(() => {
+    if (user && userRole === 'delivery_rider') {
+      void fetchRiderProfile();
+    }
+  }, [user, userRole]);
+
+  const fetchRiderProfile = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('rider_profiles')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (error) throw error;
+      setRiderProfile(data);
+    } catch (error) {
+      console.error('Rider profile fetch error:', error);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,18 +64,18 @@ export function RiderRegistration() {
       return;
     }
 
+    if (userRole && userRole !== 'customer' && userRole !== 'delivery_rider') {
+      toast.error('Each account can only have one role. Use a separate account for driver access.');
+      return;
+    }
+
+    if (userRole === 'customer') {
+      toast.error('This account is already registered as customer. Ask admin to change the role or use another account.');
+      return;
+    }
+
     setLoading(true);
     try {
-      // Add delivery_rider role
-      const { error: roleError } = await supabase
-        .from('user_roles')
-        .insert([{ user_id: user.id, role: 'delivery_rider' as any }]);
-
-      if (roleError && !roleError.message.includes('duplicate')) {
-        throw roleError;
-      }
-
-      // Create rider profile
       const { error: profileError } = await supabase
         .from('rider_profiles')
         .insert([{
@@ -67,7 +91,7 @@ export function RiderRegistration() {
 
       toast.success('Rider registration submitted! Awaiting admin approval.');
       setIsOpen(false);
-      window.location.reload();
+      await fetchRiderProfile();
     } catch (error: any) {
       console.error('Rider registration error:', error);
       toast.error(error.message || 'Failed to register as rider');
@@ -81,6 +105,15 @@ export function RiderRegistration() {
       <Button onClick={() => navigate('/auth')}>
         <Truck className="mr-2 h-4 w-4" />
         Become a Rider
+      </Button>
+    );
+  }
+
+  if (userRole === 'delivery_rider' && riderProfile) {
+    return (
+      <Button variant="outline" onClick={() => navigate('/rider/dashboard')}>
+        <Truck className="mr-2 h-4 w-4" />
+        Driver Dashboard
       </Button>
     );
   }

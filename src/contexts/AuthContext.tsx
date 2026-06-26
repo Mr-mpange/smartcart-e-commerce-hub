@@ -1,13 +1,14 @@
 import { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import { AppRole, getPrimaryRole } from '@/lib/user-role';
 
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   userRole: string | null;
   loading: boolean;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ data?: any; error: any }>;
+  signUp: (email: string, password: string, fullName: string, role?: AppRole) => Promise<{ data?: any; error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
 }
@@ -19,58 +20,82 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const lastFetchedUserId = useRef<string | null>(null);
-  const isInitialized = useRef(false);
-  const authStateRef = useRef<{ user: User | null; session: Session | null }>({ user: null, session: null });
+  const loadingTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
-    // Prevent multiple initializations
-    if (isInitialized.current) return;
-    isInitialized.current = true;
+    let mounted = true;
 
-    // Set up auth state listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        // Prevent processing duplicate events
-        const currentState = { user: session?.user ?? null, session };
-        if (
-          authStateRef.current.user?.id === currentState.user?.id &&
-          authStateRef.current.session?.access_token === currentState.session?.access_token &&
-          event !== 'INITIAL_SESSION'
-        ) {
-          return; // Skip duplicate events
+    const clearLoadingTimeout = () => {
+      if (loadingTimeoutRef.current) {
+        window.clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
+    };
+
+    const startLoadingFailSafe = () => {
+      clearLoadingTimeout();
+      loadingTimeoutRef.current = window.setTimeout(() => {
+        if (mounted) {
+          setLoading(false);
         }
-        
-        authStateRef.current = currentState;
-        
-        // Process auth events
-        if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          setSession(session);
-          setUser(session?.user ?? null);
-          
-          if (session?.user) {
-            // Only fetch role if it's a different user
-            if (lastFetchedUserId.current !== session.user.id) {
-              setLoading(true);
-              await fetchUserRole(session.user.id);
-            } else {
-              // Same user, just set loading to false
-              setLoading(false);
-            }
-          } else {
-            setLoading(false);
-          }
-        } else if (event === 'SIGNED_OUT') {
+      }, 5000);
+    };
+
+    const applySession = async (nextSession: Session | null) => {
+      if (!mounted) return;
+
+      setSession(nextSession);
+      setUser(nextSession?.user ?? null);
+
+      if (!nextSession?.user) {
+        setUserRole(null);
+        setLoading(false);
+        clearLoadingTimeout();
+        return;
+      }
+
+      startLoadingFailSafe();
+      await fetchUserRole(nextSession.user.id);
+      clearLoadingTimeout();
+    };
+
+    const bootstrap = async () => {
+      try {
+        setLoading(true);
+        startLoadingFailSafe();
+        const { data, error } = await supabase.auth.getSession();
+
+        if (error) {
+          console.error('Error getting session:', error);
+          await applySession(null);
+          return;
+        }
+
+        await applySession(data.session);
+      } catch (error) {
+        console.error('Error bootstrapping auth:', error);
+        if (mounted) {
           setSession(null);
           setUser(null);
           setUserRole(null);
           setLoading(false);
-          lastFetchedUserId.current = null;
         }
       }
-    );
+    };
 
-    return () => subscription.unsubscribe();
+    void bootstrap();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (!mounted) return;
+      setLoading(true);
+      void applySession(nextSession);
+    });
+
+    return () => {
+      mounted = false;
+      clearLoadingTimeout();
+      subscription.unsubscribe();
+    };
   }, []);
 
   const fetchUserRole = async (userId: string) => {
@@ -88,23 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const roles = (data ?? []).map((r) => r.role);
-
-      // Priority order for routing/guards when user has multiple roles
-      let newRole: string | null = null;
-      if (roles.includes('admin')) {
-        newRole = 'admin';
-      } else if (roles.includes('vendor')) {
-        newRole = 'vendor';
-      } else if (roles.includes('delivery_rider')) {
-        newRole = 'delivery_rider';
-      } else if (roles.includes('reseller')) {
-        newRole = 'reseller';
-      } else if (roles.includes('customer')) {
-        newRole = 'customer';
-      }
-
-      setUserRole(newRole);
-      lastFetchedUserId.current = userId;
+      setUserRole(getPrimaryRole(roles));
       setLoading(false);
     } catch (error) {
       console.error('Error in fetchUserRole:', error);
@@ -113,7 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const signUp = async (email: string, password: string, fullName: string) => {
+  const signUp = async (email: string, password: string, fullName: string, role: AppRole = 'customer') => {
     const redirectUrl = `${window.location.origin}/`;
     
     const { data, error } = await supabase.auth.signUp({
@@ -123,6 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         emailRedirectTo: redirectUrl,
         data: {
           full_name: fullName,
+          role,
         },
       },
     });
@@ -142,31 +152,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     try {
       setLoading(true);
-      // Clear state first
-      setUser(null);
-      setSession(null);
-      setUserRole(null);
-      lastFetchedUserId.current = null;
-      isInitialized.current = false;
-      
-      // Then sign out from Supabase
       const { error } = await supabase.auth.signOut();
       if (error) {
         console.error('Supabase sign out error:', error);
       }
-      
-      // Force clear localStorage
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('sb-qpojzblbodlphwzfpxbi-auth-token');
-      }
     } catch (error) {
       console.error('Error signing out:', error);
-      // Clear state anyway
+    } finally {
       setUser(null);
       setSession(null);
       setUserRole(null);
-      lastFetchedUserId.current = null;
-    } finally {
       setLoading(false);
     }
   };

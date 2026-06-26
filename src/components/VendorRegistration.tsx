@@ -56,19 +56,19 @@ export function VendorRegistration() {
       return;
     }
 
+    if (userRole && userRole !== 'customer' && userRole !== 'vendor') {
+      toast.error('Each account can only have one role. Use a separate account for vendor access.');
+      return;
+    }
+
+    if (userRole === 'customer') {
+      toast.error('This account is already registered as customer. Ask admin to change the role or use another account.');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      // First, add the vendor role to the user
-      const { error: roleError } = await supabase
-        .from('user_roles')
-        .insert([{ user_id: user.id, role: 'vendor' }]);
-
-      if (roleError && !roleError.message.includes('duplicate')) {
-        throw roleError;
-      }
-
-      // Then create the vendor profile
       const { error: profileError } = await supabase
         .from('vendor_profiles')
         .insert([{

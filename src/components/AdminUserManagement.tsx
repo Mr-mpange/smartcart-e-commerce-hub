@@ -15,7 +15,7 @@ import {
   Search, RefreshCw
 } from 'lucide-react';
 
-type UserRole = 'customer' | 'vendor' | 'delivery_rider' | 'admin';
+type UserRole = 'customer' | 'vendor' | 'delivery_rider' | 'admin' | 'reseller';
 
 interface UserProfile {
   id: string;
@@ -133,6 +133,7 @@ export function AdminUserManagement() {
         password: newUserData.password,
         user_metadata: {
           full_name: newUserData.fullName,
+          role: newUserData.role,
         },
         email_confirm: true, // Auto-confirm email for admin-created users
       });
@@ -156,16 +157,6 @@ export function AdminUserManagement() {
         if (profileUpdateError) {
           console.error('Profile update error:', profileUpdateError);
         }
-      }
-
-      // Add role
-      const { error: roleError } = await supabase
-        .from('user_roles')
-        .insert([{ user_id: authData.user.id, role: newUserData.role }]);
-
-      if (roleError) {
-        console.error('Role creation error:', roleError);
-        throw roleError;
       }
 
       // Restore admin session if it was lost
@@ -390,6 +381,7 @@ export function AdminUserManagement() {
                   <SelectItem value="customer">Customer</SelectItem>
                   <SelectItem value="vendor">Vendor</SelectItem>
                   <SelectItem value="delivery_rider">Delivery Rider</SelectItem>
+                  <SelectItem value="reseller">Reseller</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
                 </SelectContent>
               </Select>
@@ -460,6 +452,7 @@ export function AdminUserManagement() {
                           <SelectItem value="customer">Customer</SelectItem>
                           <SelectItem value="vendor">Vendor</SelectItem>
                           <SelectItem value="delivery_rider">Delivery Rider</SelectItem>
+                          <SelectItem value="reseller">Reseller</SelectItem>
                           <SelectItem value="admin">Admin</SelectItem>
                         </SelectContent>
                       </Select>

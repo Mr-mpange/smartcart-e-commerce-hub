@@ -1,6 +1,7 @@
 import { ReactNode, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { getDashboardRoute } from '@/lib/role-routing';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -21,9 +22,9 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
       return;
     }
     
-    // If user exists but role is required and doesn't match, redirect to home
+    // If user exists but role is required and doesn't match, redirect to their own dashboard
     if (requiredRole && userRole && userRole !== requiredRole) {
-      navigate('/');
+      navigate(getDashboardRoute(userRole));
       return;
     }
   }, [user, userRole, loading, navigate, requiredRole]);
